@@ -1,0 +1,145 @@
+import { describe, expect, it } from 'vitest';
+import {
+  densityAltitude,
+  geometricAltitude,
+  geopotentialAltitude,
+  isa,
+  pressureAltitude,
+  speedOfSound,
+} from '../src/physics/atmosphere.js';
+import { P0, RHO0, T0 } from '../src/physics/constants.js';
+
+/**
+ * Reference values from the US Standard Atmosphere 1976 / ISO 2533 tables.
+ * Tabulated against *geopotential* altitude, so the tests feed geopotential
+ * altitude in via `geometricAltitude()` rather than comparing at geometric
+ * altitude and absorbing a ~0.2 % error as "tolerance".
+ */
+const ISA_TABLE = [
+  { h: 0, T: 288.15, p: 101325, rho: 1.225 },
+  { h: 5000, T: 255.65, p: 54019.9, rho: 0.736116 },
+  { h: 11000, T: 216.65, p: 22632.1, rho: 0.363918 },
+  { h: 20000, T: 216.65, p: 5474.89, rho: 0.0880349 },
+  { h: 32000, T: 228.65, p: 868.019, rho: 0.0132250 },
+];
+
+const relativeError = (actual: number, expected: number) =>
+  Math.abs(actual - expected) / Math.abs(expected);
+
+describe('ISA against published tables', () => {
+  for (const row of ISA_TABLE) {
+    it(`matches the standard table at ${row.h} m geopotential`, () => {
+      const state = isa(geometricAltitude(row.h));
+
+      expect(relativeError(state.temperature, row.T)).toBeLessThan(1e-6);
+      expect(relativeError(state.pressure, row.p)).toBeLessThan(1e-3);
+      expect(relativeError(state.density, row.rho)).toBeLessThan(1e-3);
+    });
+  }
+
+  it('reproduces sea-level standard conditions exactly', () => {
+    const sl = isa(0);
+    expect(sl.temperature).toBeCloseTo(T0, 10);
+    expect(sl.pressure).toBeCloseTo(P0, 10);
+    expect(sl.density).toBeCloseTo(RHO0, 3);
+    expect(sl.densityRatio).toBeCloseTo(1, 3);
+    expect(sl.speedOfSound).toBeCloseTo(340.294, 2);
+  });
+});
+
+describe('layer structure', () => {
+  it('is continuous across every layer boundary', () => {
+    // A tabulated base pressure with too few digits would show up here as a
+    // step, and would then appear as a kink in every derived curve.
+    for (const boundary of [11000, 20000, 32000, 47000, 51000, 71000]) {
+      const below = isa(geometricAltitude(boundary - 0.001));
+      const above = isa(geometricAltitude(boundary + 0.001));
+      expect(relativeError(above.pressure, below.pressure)).toBeLessThan(1e-6);
+      expect(relativeError(above.temperature, below.temperature)).toBeLessThan(1e-6);
+    }
+  });
+
+  it('holds temperature constant through the tropopause', () => {
+    expect(isa(geometricAltitude(11000)).temperature).toBeCloseTo(216.65, 6);
+    expect(isa(geometricAltitude(15000)).temperature).toBeCloseTo(216.65, 6);
+    expect(isa(geometricAltitude(20000)).temperature).toBeCloseTo(216.65, 6);
+  });
+
+  it('warms again in the stratosphere above 20 km', () => {
+    // The single-formula troposphere model gets this backwards, which is the
+    // reason the layer table exists.
+    expect(isa(geometricAltitude(30000)).temperature).toBeGreaterThan(216.65);
+  });
+
+  it('decreases pressure and density monotonically with altitude', () => {
+    let previous = isa(0);
+    for (let h = 500; h <= 80000; h += 500) {
+      const current = isa(geometricAltitude(h));
+      expect(current.pressure).toBeLessThan(previous.pressure);
+      expect(current.density).toBeLessThan(previous.density);
+      previous = current;
+    }
+  });
+});
+
+describe('altitude conversions', () => {
+  it('round-trips geometric and geopotential altitude', () => {
+    for (const h of [0, 1000, 11000, 30000]) {
+      expect(geometricAltitude(geopotentialAltitude(h))).toBeCloseTo(h, 6);
+    }
+  });
+
+  it('places geopotential altitude below geometric altitude', () => {
+    expect(geopotentialAltitude(11000)).toBeLessThan(11000);
+    expect(geopotentialAltitude(11000)).toBeGreaterThan(10950);
+  });
+
+  it('inverts the pressure and density profiles', () => {
+    for (const h of [0, 5000, 11000, 20000, 32000]) {
+      const state = isa(geometricAltitude(h));
+      expect(pressureAltitude(state.pressure)).toBeCloseTo(h, 4);
+      expect(densityAltitude(state.density)).toBeCloseTo(h, 4);
+    }
+  });
+});
+
+describe('ISA deviation and density altitude', () => {
+  it('equates density altitude with pressure altitude on a standard day', () => {
+    const state = isa(2000);
+    expect(state.densityAltitude).toBeCloseTo(state.pressureAltitude, 3);
+  });
+
+  it('pushes density altitude above pressure altitude on a hot day', () => {
+    const hot = isa(2000, 20);
+    expect(hot.densityAltitude).toBeGreaterThan(hot.pressureAltitude);
+    expect(hot.density).toBeLessThan(isa(2000).density);
+    // Rule of thumb: about 118 ft (36 m) of density altitude per degree of ISA
+    // deviation. Loose bounds — this is a sanity check, not a specification.
+    const excess = hot.densityAltitude - hot.pressureAltitude;
+    expect(excess).toBeGreaterThan(550);
+    expect(excess).toBeLessThan(850);
+  });
+
+  it('leaves pressure untouched by the ISA deviation', () => {
+    expect(isa(3000, 25).pressure).toBeCloseTo(isa(3000).pressure, 9);
+  });
+
+  it('raises the speed of sound on a hot day', () => {
+    expect(isa(0, 30).speedOfSound).toBeGreaterThan(isa(0).speedOfSound);
+    expect(speedOfSound(288.15)).toBeCloseTo(340.294, 2);
+  });
+});
+
+describe('input validation', () => {
+  it('rejects altitudes above the modelled ceiling', () => {
+    expect(() => isa(90000)).toThrow(RangeError);
+  });
+
+  it('rejects an ISA deviation that drives temperature non-physical', () => {
+    expect(() => isa(11000, -300)).toThrow(RangeError);
+  });
+
+  it('rejects a non-finite altitude', () => {
+    expect(() => isa(Number.NaN)).toThrow(RangeError);
+  });
+});

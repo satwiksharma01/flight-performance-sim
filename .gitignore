@@ -1,0 +1,9 @@
+node_modules/
+dist/
+build/
+.next/
+*.tmp.*
+_acltest.txt
+_t.txt
+_probe.txt
+.DS_Store
