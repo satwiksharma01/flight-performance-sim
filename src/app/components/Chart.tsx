@@ -183,7 +183,9 @@ export function Chart(props: ChartProps) {
       const p = latest.current;
       const right = bbox.left + bbox.width;
       ctx.save();
+      // uPlot leaves its own text state on the context; set ours explicitly.
       ctx.textBaseline = 'alphabetic';
+      ctx.textAlign = 'left';
 
       // Marker labels, in the top padding: V with a subscript, staggered into
       // rows so labels for close speeds (V_s and V_mp often are) never overlap.
