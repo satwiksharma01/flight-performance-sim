@@ -5,11 +5,9 @@
   "type": "module",
   "description": "Aircraft performance analysis in the browser, with a cross-validated physics core",
   "scripts": {
-    "test": "node scripts/dev.mjs test",
-    "test:watch": "node scripts/dev.mjs watch",
-    "typecheck": "node scripts/dev.mjs typecheck",
-    "test:direct": "vitest run",
-    "typecheck:direct": "tsc --noEmit"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "typescript": "^5.7.2",

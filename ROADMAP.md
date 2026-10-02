@@ -328,10 +328,6 @@ curve move. A complete product at a tiny scope.
 - [x] URL state encoding — delta-encoded, non-throwing decode
 - [ ] Custom aircraft editor — *UI, blocked on the shell*
 
-Note: `next dev` cannot run on D: either — it writes and deletes `.next`
-continuously. The UI needs the ACL fix, or a watch mode added to
-`scripts/dev.mjs`.
-
 ### v0.3 — Propulsion and climb
 - [ ] Piston / turboprop / turbofan lapse models
 - [ ] Exact climb solution + small-angle toggle showing the delta

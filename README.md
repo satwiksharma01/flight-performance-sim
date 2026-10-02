@@ -10,42 +10,11 @@ permalinks are complete and tested. No UI yet. See [ROADMAP.md](ROADMAP.md).
 ## Running the tests
 
 ```bash
+npm install
 npm test
 npm run typecheck
 npm run test:watch
 ```
-
-No `npm install` step — the first run installs for you.
-
-### Why there is a build bridge
-
-This project lives on `D:`, which grants `Everyone:(RX,W)` but **not Delete**. npm
-installs by staging packages and renaming them into place, so the rename is denied
-and `npm install` cannot complete here. The same ACL is why editors that save
-atomically leave `*.tmp.<pid>.<hash>` files behind.
-
-`scripts/dev.mjs` works around it: it mirrors `src/`, `tests/` and the configs to
-`%LOCALAPPDATA%\Aerospace-Flight-Performance-Simulator-build`, installs there once,
-and runs the requested command against the mirror. It uses only Node built-ins, so it
-runs with nothing installed. Source of truth stays on `D:`; the mirror is disposable
-and is refreshed on every run.
-
-### Removing the bridge
-
-From an **elevated** PowerShell:
-
-```powershell
-icacls "D:\" /grant "Everyone:(OI)(CI)(M)" /T
-```
-
-Then clean up the files left by the failed atomic writes:
-
-```powershell
-Get-ChildItem "D:\Aerospace Flight Performance Simulator" -Recurse -Include '*.tmp.*','_acltest.txt','_t.txt','_probe.txt' | Remove-Item
-```
-
-After that, `npm run test:direct` and `npm run typecheck:direct` run in place, and
-`scripts/dev.mjs` plus the bridge scripts in `package.json` can be deleted.
 
 ## What is implemented
 
