@@ -53,8 +53,8 @@ flight-performance-simulator/
 │   │   │   ├── maneuver.ts   # load factor, turn rate/radius, V-n
 │   │   │   └── envelope.ts   # Ps contours, envelope boundary
 │   │   └── sensitivity.ts    # finite-difference d(output)/d(input)
-│   ├── app/                  # Next.js routes (static export)
-│   ├── components/
+│   ├── app/                  # Vite + React single page (was: Next.js routes)
+│   │   └── components/
 │   └── data/aircraft/        # presets as plain JSON
 ├── validation/               # Python. The backend, repurposed.
 │   ├── reference.py          # independent NumPy implementation
@@ -309,24 +309,26 @@ is demoable for weeks. Motivation dies there. Reorder so **every release is a co
 deployed, shareable thing.**
 
 ### v0.1 — "It works and it's live" (one weekend)
-- [ ] Next.js + TS + Tailwind, static export, deployed **on day one**
-- [ ] `units.ts` with branded types
-- [ ] ISA to 32 km + density altitude + ΔISA
-- [ ] Drag polar, CL required, stall speed
-- [ ] **One chart:** drag vs velocity, with V_md marked
-- [ ] **One slider:** altitude, updating live
-- [ ] Vitest tests for atmosphere and drag polar
+- [x] Vite + React + TS, static build — *Vite, not Next.js: one page, no routes yet,
+      and a plain static `dist/`. Plain CSS rather than Tailwind*
+- [ ] Deployed — *the build is ready for any static host*
+- [x] `units.ts` with branded types
+- [x] ISA to 32 km + density altitude + ΔISA — *to 84 852 m*
+- [x] Drag polar, CL required, stall speed
+- [x] **One chart:** drag vs velocity, with V_md marked — *three charts, four markers*
+- [x] **One slider:** altitude, updating live
+- [x] Vitest tests for atmosphere and drag polar
 
 Exit criterion: a public URL where a stranger drags a slider and watches a correct drag
 curve move. A complete product at a tiny scope.
 
 ### v0.2 — Airspeed and the full curve set
-- [x] TAS / EAS / CAS / Mach — *physics done; the axis toggle waits on the UI shell*
+- [x] TAS / EAS / CAS / Mach, with the axis toggle and a kt / m/s / km/h unit toggle
 - [x] Thrust required, power required, L/D vs velocity
 - [x] Closed-form optima as labelled markers (V_md, V_mp, V_jr)
 - [x] Aircraft preset registry — *typed TS rather than JSON; ids are URL API*
 - [x] URL state encoding — delta-encoded, non-throwing decode
-- [ ] Custom aircraft editor — *UI, blocked on the shell*
+- [x] Custom aircraft editor — *validated inline; edits stay delta-encoded in the URL*
 
 ### v0.3 — Propulsion and climb
 - [ ] Piston / turboprop / turbofan lapse models
@@ -368,9 +370,11 @@ wave-drag effects, compressibility corrections.
 
 ## 8. Tooling decisions
 
-- **Charts:** uPlot or visx. Recharts re-renders too slowly for 60 fps slider dragging
+- **Charts:** uPlot. Recharts re-renders too slowly for 60 fps slider dragging
   with multiple series; Plotly's bundle is ~3 MB. Engineering plots need log axes,
-  custom markers and crosshairs — pick for that.
+  custom markers and crosshairs — uPlot's draw hooks give all three.
+- **Framework:** Vite + React. A single page with no routes doesn't need Next.js;
+  revisit if `/validation` grows into a real second page.
 - **Tests:** Vitest (TS) + pytest (Python reference).
 - **Hosting:** static export, no server.
 - **State:** the URL is the source of truth.
