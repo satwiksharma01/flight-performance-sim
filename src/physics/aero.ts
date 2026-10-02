@@ -214,16 +214,34 @@ export function maxClHalfOverCd(aircraft: Aircraft): number {
   return Math.sqrt(cl) / cdFromCl(cl, aircraft.cd0, kf);
 }
 
-/** Validate an aircraft definition, returning human-readable problems. */
+type LimitedField = keyof Omit<Aircraft, 'name'>;
+
+/**
+ * Supported parameter ranges, inclusive.
+ *
+ * Wide enough for anything from a hand-launched model to a wide-body, narrow
+ * enough that no combination overflows a double anywhere in the atmosphere.
+ * Outside them the numbers stop describing an aircraft: a wing area of 1e-320
+ * m^2 is positive, but it sends the stall speed to infinity.
+ */
+export const AIRCRAFT_LIMITS: Record<LimitedField, { readonly label: string; readonly min: number; readonly max: number }> = {
+  mass: { label: 'Mass', min: 0.1, max: 1e6 },
+  wingArea: { label: 'Wing area', min: 0.01, max: 2000 },
+  aspectRatio: { label: 'Aspect ratio', min: 0.5, max: 50 },
+  oswaldEfficiency: { label: 'Oswald efficiency', min: 0.1, max: 1 },
+  cd0: { label: 'CD0', min: 1e-4, max: 0.5 },
+  clMax: { label: 'CLmax', min: 0.05, max: 5 },
+  clMaxFlaps: { label: 'CLmax with flaps', min: 0.05, max: 6 },
+};
+
+/** Validate an aircraft definition, returning one human-readable problem per bad field. */
 export function validateAircraft(aircraft: Aircraft): string[] {
   const problems: string[] = [];
-  if (aircraft.mass <= 0) problems.push('Mass must be greater than zero.');
-  if (aircraft.wingArea <= 0) problems.push('Wing area must be greater than zero.');
-  if (aircraft.aspectRatio <= 0) problems.push('Aspect ratio must be greater than zero.');
-  if (aircraft.oswaldEfficiency <= 0 || aircraft.oswaldEfficiency > 1) {
-    problems.push('Oswald efficiency must lie between 0 and 1.');
+  for (const [field, { label, min, max }] of Object.entries(AIRCRAFT_LIMITS)) {
+    const value = aircraft[field as LimitedField];
+    if (value === undefined) continue;
+    if (!(value > 0)) problems.push(`${label} must be greater than zero.`);
+    else if (value < min || value > max) problems.push(`${label} must lie between ${min} and ${max}.`);
   }
-  if (aircraft.cd0 <= 0) problems.push('CD0 must be greater than zero.');
-  if (aircraft.clMax <= 0) problems.push('CLmax must be greater than zero.');
   return problems;
 }

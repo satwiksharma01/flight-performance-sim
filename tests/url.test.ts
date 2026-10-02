@@ -104,6 +104,16 @@ describe('decoding', () => {
 });
 
 describe('malformed input', () => {
+  it('rejects aircraft values that are positive but not physical', () => {
+    // A 1e-320 m^2 wing is greater than zero, and sends the stall speed to infinity.
+    const { scenario, problems } = decodeScenario('ac=c172&s=1e-320&m=1e308');
+    expect(scenario.aircraft.wingArea).toBe(CESSNA_172S.wingArea);
+    expect(scenario.aircraft.mass).toBe(CESSNA_172S.mass);
+    expect(problems).toHaveLength(2);
+    expect(problems.some((p) => p.startsWith('Wing area') && p.includes('supported minimum'))).toBe(true);
+    expect(problems.some((p) => p.startsWith('Mass') && p.includes('supported maximum'))).toBe(true);
+  });
+
   it('reports an unknown preset and falls back to the default aircraft', () => {
     const { scenario, problems } = decodeScenario('ac=spaceship');
     expect(problems).toHaveLength(1);

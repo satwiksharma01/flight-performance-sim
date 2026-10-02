@@ -1,5 +1,5 @@
 import { useEffect, useId, useState, type ReactNode } from 'react';
-import type { Aircraft } from '../../physics/index.js';
+import { AIRCRAFT_LIMITS, type Aircraft } from '../../physics/index.js';
 import { PRESETS, PRESET_IDS, type PresetId } from '../../data/aircraft/presets.js';
 import type { ChartModel, SpeedAxis, SpeedUnit, ViewSettings } from '../model.js';
 import { AXIS_NAME, UNIT_NAME, axisSpeed, feet, num, signed } from '../format.js';
@@ -12,34 +12,26 @@ interface FieldSpec {
   readonly key: keyof Omit<Aircraft, 'name' | 'clMaxFlaps'>;
   readonly label: string;
   readonly unit?: string;
-  readonly max: number;
-  /** Upper bound is inclusive (Oswald efficiency may be exactly 1) */
-  readonly maxInclusive?: boolean;
   readonly hint: string;
 }
 
 const FIELDS: readonly FieldSpec[] = [
-  { key: 'mass', label: 'Mass', unit: 'kg', max: 1_000_000, hint: 'Weight sets the lift the wing must make.' },
-  { key: 'wingArea', label: 'Wing area', unit: 'm²', max: 2000, hint: 'Reference area S.' },
-  { key: 'aspectRatio', label: 'Aspect ratio', max: 50, hint: 'b²/S. Higher means less induced drag.' },
-  {
-    key: 'oswaldEfficiency',
-    label: 'Oswald efficiency',
-    max: 1,
-    maxInclusive: true,
-    hint: 'Span efficiency e, in (0, 1].',
-  },
-  { key: 'cd0', label: 'CD₀', max: 0.5, hint: 'Zero-lift drag coefficient.' },
-  { key: 'clMax', label: 'CL max', max: 5, hint: 'Clean maximum lift coefficient.' },
+  { key: 'mass', label: 'Mass', unit: 'kg', hint: 'Weight sets the lift the wing must make.' },
+  { key: 'wingArea', label: 'Wing area', unit: 'm²', hint: 'Reference area S.' },
+  { key: 'aspectRatio', label: 'Aspect ratio', hint: 'b²/S. Higher means less induced drag.' },
+  { key: 'oswaldEfficiency', label: 'Oswald efficiency', hint: 'Span efficiency e.' },
+  { key: 'cd0', label: 'CD₀', hint: 'Zero-lift drag coefficient.' },
+  { key: 'clMax', label: 'CL max', hint: 'Clean maximum lift coefficient.' },
 ];
 
+/** The same ranges a permalink is held to, so the editor can't make a link that won't load. */
 function validate(spec: FieldSpec, raw: string): { value: number } | { error: string } {
   if (raw.trim() === '') return { error: 'Enter a number.' };
   const value = Number(raw);
   if (!Number.isFinite(value)) return { error: 'Enter a number.' };
-  if (value <= 0) return { error: 'Must be greater than zero.' };
-  if (spec.maxInclusive ? value > spec.max : value >= spec.max) {
-    return { error: `Must be ${spec.maxInclusive ? 'at most' : 'below'} ${num(spec.max, spec.max < 1 ? 1 : 0)}.` };
+  const { min, max } = AIRCRAFT_LIMITS[spec.key];
+  if (value < min || value > max) {
+    return { error: `Between ${min.toLocaleString('en-US')} and ${max.toLocaleString('en-US')}.` };
   }
   return { value };
 }

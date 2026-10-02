@@ -16,7 +16,7 @@
  *    should cost the user a warning, not a blank page.
  */
 
-import { validateAircraft, type Aircraft } from '../physics/aero.js';
+import { AIRCRAFT_LIMITS, validateAircraft, type Aircraft } from '../physics/aero.js';
 import { ISA_CEILING } from '../physics/constants.js';
 import { CESSNA_172S, PRESET_IDS, getPreset } from '../data/aircraft/presets.js';
 
@@ -188,6 +188,12 @@ function readNumber(
   return value;
 }
 
+/** An aircraft field's supported range, rejecting zero and negatives by name. */
+function range(field: keyof typeof AIRCRAFT_LIMITS): NumberFieldOptions {
+  const { min, max } = AIRCRAFT_LIMITS[field];
+  return { exclusiveMin: 0, min, max };
+}
+
 /**
  * Decode a query string into a scenario.
  *
@@ -221,32 +227,25 @@ export function decodeScenario(query: string): DecodeResult {
   const name = params.get(KEY.name);
   if (name !== null && name.trim() !== '') aircraft = { ...aircraft, name };
 
-  const mass = readNumber(params, KEY.mass, 'Mass', problems, { exclusiveMin: 0 });
+  const mass = readNumber(params, KEY.mass, 'Mass', problems, range('mass'));
   if (mass !== undefined) aircraft = { ...aircraft, mass };
 
-  const wingArea = readNumber(params, KEY.wingArea, 'Wing area', problems, { exclusiveMin: 0 });
+  const wingArea = readNumber(params, KEY.wingArea, 'Wing area', problems, range('wingArea'));
   if (wingArea !== undefined) aircraft = { ...aircraft, wingArea };
 
-  const aspectRatio = readNumber(params, KEY.aspectRatio, 'Aspect ratio', problems, {
-    exclusiveMin: 0,
-  });
+  const aspectRatio = readNumber(params, KEY.aspectRatio, 'Aspect ratio', problems, range('aspectRatio'));
   if (aspectRatio !== undefined) aircraft = { ...aircraft, aspectRatio };
 
-  const oswald = readNumber(params, KEY.oswaldEfficiency, 'Oswald efficiency', problems, {
-    exclusiveMin: 0,
-    max: 1,
-  });
+  const oswald = readNumber(params, KEY.oswaldEfficiency, 'Oswald efficiency', problems, range('oswaldEfficiency'));
   if (oswald !== undefined) aircraft = { ...aircraft, oswaldEfficiency: oswald };
 
-  const cd0 = readNumber(params, KEY.cd0, 'CD0', problems, { exclusiveMin: 0 });
+  const cd0 = readNumber(params, KEY.cd0, 'CD0', problems, range('cd0'));
   if (cd0 !== undefined) aircraft = { ...aircraft, cd0 };
 
-  const clMax = readNumber(params, KEY.clMax, 'CLmax', problems, { exclusiveMin: 0 });
+  const clMax = readNumber(params, KEY.clMax, 'CLmax', problems, range('clMax'));
   if (clMax !== undefined) aircraft = { ...aircraft, clMax };
 
-  const clMaxFlaps = readNumber(params, KEY.clMaxFlaps, 'CLmax with flaps', problems, {
-    exclusiveMin: 0,
-  });
+  const clMaxFlaps = readNumber(params, KEY.clMaxFlaps, 'CLmax with flaps', problems, range('clMaxFlaps'));
   if (clMaxFlaps !== undefined) aircraft = { ...aircraft, clMaxFlaps };
 
   // If anything was overridden the result is no longer the preset, so the id is
