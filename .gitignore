@@ -1,4 +1,6 @@
 node_modules/
 dist/
+validation/out/
+__pycache__/
 .claude/
 .DS_Store

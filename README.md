@@ -44,7 +44,8 @@ the site is not deployed yet. See [ROADMAP.md](ROADMAP.md).
 ```bash
 npm install
 npm run dev          # the explorer, at http://localhost:5173
-npm test             # 142 tests
+npm test             # 150 tests
+npm run validate     # cross-check against the independent Python reference (needs SciPy)
 npm run typecheck
 npm run build        # static site in dist/, relative paths, any host
 ```
@@ -65,11 +66,20 @@ npm run build        # static site in dist/, relative paths, any host
 | `src/app/permalink.ts` | View settings in the URL, and delta encoding for edited presets |
 | `src/app/components/` | React controls, readouts, and the uPlot chart with its marker overlays |
 
-142 tests, covering the published ISA table at five altitudes, layer continuity,
+150 tests, covering the published ISA table at five altitudes, layer continuity,
 profile inversion, every closed-form optimum cross-checked against a brute-force
 scan, permalink round-trip stability, and the chart model's physics: the drag curve
 is identical against EAS at every altitude and slides right by `sqrt(ρ₀/ρ)` against
-TAS.
+TAS. Against numbers from outside the code, they reproduce Anderson's CP-1 and CP-2
+worked examples and put Mach 0.78 at FL350 at 450 KTAS and 265 KCAS. Property tests
+run 2,000 random aircraft and 3,000 hostile links through the explorer.
+
+`validation/reference.py` is an independent implementation in Python, written from
+the standards rather than translated from the TypeScript: ISA integrated layer by
+layer, CAS by root-solving the pitot relation, and the characteristic speeds by
+numerical minimisation. Atmosphere and airspeeds agree to 1e-16, CAS to 1e-8 and the
+speeds to 1e-8. It also found the one known gap: above Mach 1, CAS still uses the
+subsonic pitot relation instead of Rayleigh's, off by up to 6 %.
 
 Two exact identities are pinned as tests because they catch algebra errors that
 plausible-looking numbers would hide: every characteristic speed is altitude-invariant
