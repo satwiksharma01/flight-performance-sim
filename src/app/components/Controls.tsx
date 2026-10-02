@@ -31,7 +31,8 @@ function validate(spec: FieldSpec, raw: string): { value: number } | { error: st
   if (!Number.isFinite(value)) return { error: 'Enter a number.' };
   const { min, max } = AIRCRAFT_LIMITS[spec.key];
   if (value < min || value > max) {
-    return { error: `Between ${min.toLocaleString('en-US')} and ${max.toLocaleString('en-US')}.` };
+    const show = (v: number) => v.toLocaleString('en-US', { maximumFractionDigits: 6 });
+    return { error: `Between ${show(min)} and ${show(max)}.` };
   }
   return { value };
 }
