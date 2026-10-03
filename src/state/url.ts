@@ -24,7 +24,7 @@ export interface Scenario {
   /** Preset this scenario started from, or null for a fully custom aircraft */
   readonly presetId: string | null;
   readonly aircraft: Aircraft;
-  /** Geometric altitude [m] */
+  /** Pressure altitude [m], geopotential: what an altimeter set to 1013.25 hPa reads */
   readonly altitude: number;
   /** ISA temperature deviation [K] */
   readonly deltaISA: number;

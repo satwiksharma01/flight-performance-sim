@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { geometricAltitude, isa } from '../src/physics/atmosphere.js';
+import { atPressureAltitude } from '../src/physics/atmosphere.js';
 import { pitotPressureRatio, tasToCas } from '../src/physics/airspeed.js';
 import { maxLiftToDrag, minimumDrag, type Aircraft } from '../src/physics/aero.js';
 
@@ -51,9 +51,8 @@ describe('Anderson, Introduction to Flight, worked examples', () => {
 });
 
 describe('airline figures', () => {
-  // Flight levels are pressure altitudes, which are geopotential. isa() takes
-  // geometric altitude, so convert first.
-  const fl350 = isa(geometricAltitude(35000 * FT));
+  // Flight levels are pressure altitudes.
+  const fl350 = atPressureAltitude(35000 * FT);
 
   it('gives a speed of sound of 576 kt at FL350 on a standard day', () => {
     expect(fl350.speedOfSound / KT).toBeCloseTo(576.4, 1);

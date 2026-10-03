@@ -197,6 +197,79 @@ function Slider({
 
 export const ALTITUDE_MAX_FT = 45_000;
 
+/** FL350 for 35,000 ft: a flight level is pressure altitude in hundreds of feet. */
+function flightLevel(feet: number): string {
+  return `FL${String(Math.round(feet / 100)).padStart(3, '0')}`;
+}
+
+/**
+ * OAT, the way a POH chart or a flight-test card states temperature. Typing one
+ * sets the ISA deviation, so this field and the slider above always agree.
+ */
+function OatField({
+  oat,
+  standard,
+  onCommit,
+}: {
+  oat: number;
+  standard: number;
+  onCommit: (oat: number) => void;
+}) {
+  const id = useId();
+  const [draft, setDraft] = useState(oat.toFixed(1));
+  const [error, setError] = useState<string | null>(null);
+
+  // Follow the slider, but leave the draft alone while it already says the
+  // same temperature: typing "30" must not be rewritten to "30.0" mid-edit.
+  useEffect(() => {
+    if (!(Math.abs(Number(draft) - oat) < 0.05)) {
+      setDraft(oat.toFixed(1));
+      setError(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [oat]);
+
+  return (
+    <div className="inline-field">
+      <label htmlFor={id}>OAT</label>
+      <input
+        id={id}
+        type="text"
+        inputMode="decimal"
+        autoComplete="off"
+        value={draft}
+        aria-invalid={error !== null}
+        aria-describedby={`${id}-std`}
+        onBlur={() => {
+          // Leaving the field abandons an entry that was never applied.
+          if (error) {
+            setDraft(oat.toFixed(1));
+            setError(null);
+          }
+        }}
+        onChange={(e) => {
+          const raw = e.target.value;
+          setDraft(raw);
+          const value = Number(raw);
+          if (raw.trim() === '' || !Number.isFinite(value)) {
+            setError('Enter a temperature.');
+          } else if (Math.abs(value - standard) > 60) {
+            setError(`That is ISA ${signed(value - standard)} °C; the model takes up to ±60.`);
+          } else {
+            setError(null);
+            onCommit(value);
+          }
+        }}
+      />
+      <span className="unit">°C</span>
+      <span className="dim" id={`${id}-std`}>
+        standard {num(standard, 1)} °C
+      </span>
+      {error && <span className="field-error">{error}</span>}
+    </div>
+  );
+}
+
 export function ConditionPanel({
   altitude,
   deltaISA,
@@ -216,37 +289,39 @@ export function ConditionPanel({
 }) {
   const id = useId();
   const altitudeFt = Math.round(altitude * FT_PER_M);
-  const oat = model.atmosphere.temperature - 273.15;
+  const standardC = model.atmosphere.standardTemperature - 273.15;
   const xMax = model.window.xMax;
 
   return (
     <section className="panel-section" aria-labelledby={`${id}-h`}>
       <h2 id={`${id}-h`}>Flight condition</h2>
       <Slider
-        label="Altitude"
+        label="Pressure altitude"
         value={altitudeFt}
         min={0}
         max={ALTITUDE_MAX_FT}
         step={100}
         readout={
           <>
-            {num(altitudeFt)} ft <span className="dim">{num(altitude)} m</span>
+            {altitudeFt >= 18_000 ? flightLevel(altitudeFt) : `${num(altitudeFt)} ft`}{' '}
+            <span className="dim">{altitudeFt >= 18_000 ? `${num(altitudeFt)} ft` : `${num(altitude)} m`}</span>
           </>
         }
         onChange={(ft) => onAltitude(Math.round(ft * 0.3048 * 100) / 100)}
       />
       <Slider
-        label="Temperature, ISA"
+        label="ISA deviation"
         value={deltaISA}
         min={-40}
         max={40}
         step={1}
-        readout={
-          <>
-            {deltaISA === 0 ? 'standard' : `${signed(deltaISA)} °C`} <span className="dim">OAT {num(oat, 1)} °C</span>
-          </>
-        }
+        readout={deltaISA === 0 ? 'standard day' : `ISA ${signed(deltaISA, Number.isInteger(deltaISA) ? 0 : 1)} °C`}
         onChange={onDeltaISA}
+      />
+      <OatField
+        oat={standardC + deltaISA}
+        standard={standardC}
+        onCommit={(oat) => onDeltaISA(Math.round((oat - standardC) * 100) / 100)}
       />
       <Slider
         label="Selected speed"

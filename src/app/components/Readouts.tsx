@@ -35,7 +35,9 @@ export function Tiles({ model, view }: { model: ChartModel; view: ViewSettings }
       <div className="card tile">
         <span className="tile-label">Density altitude</span>
         <span className="tile-value">{feet(atmosphere.densityAltitude)}</span>
-        <span className="tile-sub">Pressure altitude {feet(atmosphere.pressureAltitude)}</span>
+        <span className="tile-sub">
+          PA {feet(atmosphere.pressureAltitude)} · OAT {num(atmosphere.temperature - 273.15)} °C
+        </span>
       </div>
       {stall && (
         <div className="card tile">
@@ -182,14 +184,20 @@ export function AtmospherePanel({ model }: { model: ChartModel }) {
     <section className="card table-card" aria-labelledby="atmosphere-h">
       <h3 id="atmosphere-h">Atmosphere</h3>
       <dl className="readout">
-        <dt>Geometric altitude</dt>
+        <dt>Pressure altitude</dt>
+        <dd>
+          {feet(a.pressureAltitude)} <span className="dim">{num(a.pressureAltitude)} m</span>
+        </dd>
+        <dt title="The real height of this pressure level, if sea-level pressure is 1013.25 hPa and the ISA deviation holds all the way up. Warm air stretches the column.">
+          True altitude <span className="dim">at 1013.25 hPa</span>
+        </dt>
         <dd>
           {feet(a.geometricAltitude)} <span className="dim">{num(a.geometricAltitude)} m</span>
         </dd>
-        <dt>Temperature</dt>
+        <dt>OAT</dt>
         <dd>
           {num(a.temperature - 273.15, 1)} °C{' '}
-          <span className="dim">ISA {a.deltaISA === 0 ? '±0' : signed(a.deltaISA)}</span>
+          <span className="dim">ISA {a.deltaISA === 0 ? '±0' : signed(a.deltaISA, Number.isInteger(a.deltaISA) ? 0 : 1)}</span>
         </dd>
         <dt>Pressure</dt>
         <dd>
@@ -201,8 +209,6 @@ export function AtmospherePanel({ model }: { model: ChartModel }) {
         </dd>
         <dt>Speed of sound</dt>
         <dd>{speed(a.speedOfSound, 'kt')}</dd>
-        <dt>Pressure altitude</dt>
-        <dd>{feet(a.pressureAltitude)}</dd>
         <dt>Density altitude</dt>
         <dd>{feet(a.densityAltitude)}</dd>
       </dl>

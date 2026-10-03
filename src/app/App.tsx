@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { isa, vMinDrag, type Aircraft } from '../physics/index.js';
+import { atPressureAltitude, vMinDrag, type Aircraft } from '../physics/index.js';
 import { PRESETS, type PresetId } from '../data/aircraft/presets.js';
 import { axisToTas, buildChartModel, type ChartModel, type ViewSettings } from './model.js';
 import { canonicalize, readPermalink, writePermalink, type Permalink } from './permalink.js';
@@ -78,7 +78,7 @@ export function App() {
   const selectPreset = (id: PresetId) =>
     update((s) => {
       const aircraft = PRESETS[id];
-      const atmosphere = isa(s.scenario.altitude, s.scenario.deltaISA);
+      const atmosphere = atPressureAltitude(s.scenario.altitude, s.scenario.deltaISA);
       // Land the selected speed on best L/D, where the new aircraft is interesting.
       const tas = roundTas(vMinDrag(aircraft, atmosphere.density));
       return { ...s, basePresetId: id, scenario: { ...s.scenario, presetId: id, aircraft, tas } };
@@ -92,7 +92,7 @@ export function App() {
 
   const pickSpeed = (x: number) =>
     update((s) => {
-      const atmosphere = isa(s.scenario.altitude, s.scenario.deltaISA);
+      const atmosphere = atPressureAltitude(s.scenario.altitude, s.scenario.deltaISA);
       return { ...s, scenario: { ...s.scenario, tas: roundTas(axisToTas(x, atmosphere, s.view)) } };
     });
 
@@ -274,7 +274,8 @@ export function App() {
       <footer className="footer">
         <p>
           <strong>Model.</strong> Parabolic drag polar, C<sub>D</sub> = C<sub>D0</sub> + kC<sub>L</sub>², in steady
-          level flight at n = 1. Layered ISA atmosphere with an ISA temperature offset. No compressibility: shaded from
+          level flight at n = 1. Layered ISA atmosphere, entered as pressure altitude and ISA deviation or OAT, the way POH
+          charts and flight-test cards state a condition. No compressibility: shaded from
           Mach 0.7, not drawn past Mach 0.9. The chart axes are fitted once per aircraft at sea level, so the sliders
           move the curves rather than the axes.
         </p>

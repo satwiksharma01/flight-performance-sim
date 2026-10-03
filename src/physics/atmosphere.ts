@@ -25,9 +25,12 @@ import {
 } from './constants.js';
 
 export interface AtmosphereState {
-  /** Geometric altitude as supplied [m] */
+  /**
+   * Geometric altitude [m]. From {@link isa}: as supplied. From
+   * {@link atPressureAltitude}: the true height of the pressure level on this day.
+   */
   readonly geometricAltitude: number;
-  /** Geopotential altitude, what the ISA equations actually take [m] */
+  /** Geopotential counterpart of {@link geometricAltitude} [m] */
   readonly geopotentialAltitude: number;
   /** Static temperature, including any ISA deviation [K] */
   readonly temperature: number;
@@ -163,7 +166,10 @@ export function speedOfSound(temperature: number): number {
 }
 
 /**
- * Evaluate the atmosphere.
+ * Evaluate the atmosphere at a geometric altitude, mapped to its standard-day
+ * pressure level. Prefer {@link atPressureAltitude} for performance work: with a
+ * deviation, this treats the standard-day height as the input, so the geometric
+ * altitude it returns is nominal rather than true.
  *
  * @param geometricAlt Geometric altitude [m]
  * @param deltaISA     Temperature deviation from standard [K]. A hot day is a
@@ -179,17 +185,87 @@ export function speedOfSound(temperature: number): number {
  */
 export function isa(geometricAlt: number, deltaISA = 0): AtmosphereState {
   const h = geopotentialAltitude(geometricAlt);
+  checkLevel(h, `Altitude ${geometricAlt} m`);
+  const pressure = standardPressureAt(h);
+  return evaluate(h, deltaISA, {
+    geometricAltitude: geometricAlt,
+    geopotentialAltitude: h,
+    pressureAltitude: pressureAltitude(pressure),
+  });
+}
 
-  if (!Number.isFinite(h)) {
-    throw new RangeError(`Altitude must be finite, received ${geometricAlt}`);
-  }
-  if (h > ISA_CEILING) {
-    throw new RangeError(
-      `Altitude ${geometricAlt} m is above the modelled ceiling of ${ISA_CEILING} m geopotential`,
-    );
-  }
+/**
+ * Evaluate the atmosphere at a pressure altitude: the input performance work
+ * actually uses.
+ *
+ * @param pressureAlt Pressure altitude [m], geopotential: what an altimeter set
+ *                    to 1013.25 hPa reads. FL350 is 35 000 ft of it.
+ * @param deltaISA    Temperature deviation from standard [K].
+ *
+ * Pressure is the standard pressure at that altitude, by definition, and only
+ * temperature is offset. That is how POH charts, flight test and performance
+ * engineering all state a condition: pressure altitude and OAT.
+ *
+ * The altitude fields of the result give the *true* height of this pressure
+ * level on this day, assuming 1013.25 hPa at sea level and the same deviation
+ * all the way up. Warm air is less dense, so the column stretches: on an ISA +10
+ * day, FL100 sits about 360 ft higher than its pressure altitude. That is the
+ * pilot's "4 % per 10 °C", here integrated exactly through every layer.
+ */
+export function atPressureAltitude(pressureAlt: number, deltaISA = 0): AtmosphereState {
+  checkLevel(pressureAlt, `Pressure altitude ${pressureAlt} m`);
+  const trueGeopotential = pressureAlt + deltaISA * inverseTemperatureIntegral(pressureAlt);
+  return evaluate(pressureAlt, deltaISA, {
+    geometricAltitude: geometricAltitude(trueGeopotential),
+    geopotentialAltitude: trueGeopotential,
+    pressureAltitude: pressureAlt,
+  });
+}
 
-  const standardTemp = standardTemperatureAt(h);
+function checkLevel(geopotential: number, described: string): void {
+  if (!Number.isFinite(geopotential)) {
+    throw new RangeError(`${described} is not a finite altitude`);
+  }
+  if (geopotential > ISA_CEILING) {
+    throw new RangeError(`${described} is above the modelled ceiling of ${ISA_CEILING} m geopotential`);
+  }
+}
+
+/**
+ * The integral of 1/T_std from sea level to a geopotential altitude [m/K].
+ *
+ * Hydrostatics gives dH = -(R T / g0) dp/p, so at the same pressure a column at
+ * T_std + ΔT is taller than the standard one by ΔT times this integral. Exact per
+ * layer: ln(T_top/T_base)/L where temperature varies, Δh/T where it doesn't.
+ */
+function inverseTemperatureIntegral(geopotential: number): number {
+  const segment = (layer: AtmosphereLayer, from: number, to: number): number => {
+    if (layer.lapseRate === 0) return (to - from) / layer.baseTemperature;
+    const tAt = (h: number) => layer.baseTemperature + layer.lapseRate * (h - layer.baseAltitude);
+    return Math.log(tAt(to) / tAt(from)) / layer.lapseRate;
+  };
+
+  const first = ISA_LAYERS[0];
+  if (first === undefined) throw new Error('ISA layer table is empty');
+  // Below sea level the troposphere's gradient simply extends downwards.
+  if (geopotential <= 0) return segment(first, 0, geopotential);
+
+  let total = 0;
+  for (const [i, layer] of ISA_LAYERS.entries()) {
+    const top = Math.min(geopotential, ISA_LAYERS[i + 1]?.baseAltitude ?? Infinity);
+    if (top <= layer.baseAltitude) break;
+    total += segment(layer, layer.baseAltitude, top);
+  }
+  return total;
+}
+
+/** Everything that follows from a pressure level and a temperature deviation. */
+function evaluate(
+  levelGeopotential: number,
+  deltaISA: number,
+  altitudes: Pick<AtmosphereState, 'geometricAltitude' | 'geopotentialAltitude' | 'pressureAltitude'>,
+): AtmosphereState {
+  const standardTemp = standardTemperatureAt(levelGeopotential);
   const temperature = standardTemp + deltaISA;
 
   if (temperature <= 0) {
@@ -198,12 +274,11 @@ export function isa(geometricAlt: number, deltaISA = 0): AtmosphereState {
     );
   }
 
-  const pressure = standardPressureAt(h);
+  const pressure = standardPressureAt(levelGeopotential);
   const density = pressure / (R_AIR * temperature);
 
   return {
-    geometricAltitude: geometricAlt,
-    geopotentialAltitude: h,
+    ...altitudes,
     temperature,
     standardTemperature: standardTemp,
     deltaISA,
@@ -214,7 +289,6 @@ export function isa(geometricAlt: number, deltaISA = 0): AtmosphereState {
     temperatureRatio: temperature / T0,
     densityRatio: density / RHO0,
     dynamicViscosity: dynamicViscosity(temperature),
-    pressureAltitude: pressureAltitude(pressure),
     densityAltitude: densityAltitude(density),
   };
 }

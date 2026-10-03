@@ -23,7 +23,7 @@ import {
   easToTas,
   evaluatePoint,
   generateCurve,
-  isa,
+  atPressureAltitude,
   machToTas,
   maxLiftToDrag,
   stallSpeed,
@@ -140,7 +140,7 @@ export function niceCeiling(value: number): number {
  * physical speed range whichever airspeed the axis shows.
  */
 export function chartWindow(aircraft: Aircraft, view: ViewSettings): ChartWindow {
-  const seaLevel = isa(0, 0);
+  const seaLevel = atPressureAltitude(0, 0);
   const vStall = stallSpeed(aircraft, seaLevel.density);
   const tasMax = Math.min(
     WINDOW_SPEED_RATIO * vMinDrag(aircraft, seaLevel.density),
@@ -211,7 +211,7 @@ const SAMPLE_COUNT = 200;
 /** Everything the explorer shows for one scenario and view. */
 export function buildChartModel(scenario: Scenario, view: ViewSettings): ChartModel {
   const { aircraft } = scenario;
-  const atmosphere = isa(scenario.altitude, scenario.deltaISA);
+  const atmosphere = atPressureAltitude(scenario.altitude, scenario.deltaISA);
   const window = chartWindow(aircraft, view);
   const a = atmosphere.speedOfSound;
 
