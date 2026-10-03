@@ -7,9 +7,10 @@
  * run of validation/reference.py, which can't run in a browser.
  */
 
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { CASES, GROUPS, evaluate, type Role, type ValidationCase } from '../data/validation/cases.js';
 import { CROSS_CHECK } from '../data/validation/cross-check.generated.js';
+import { POH_SOURCE, POH_TABLES, compareTable, summarise, type CellResult, type PohTable } from '../data/validation/poh-c172s.js';
 
 const REPO_URL = 'https://github.com/satwiksharma01/Aerospace-Flight-Performance-Simulator';
 
@@ -53,6 +54,13 @@ const QUANTITY_LABEL: Record<string, string> = {
   'min-sink speed': 'Minimum-sink speed',
   'min sink': 'Minimum sink rate',
   'glide into wind': 'Best glide into wind',
+  'V-n speeds': 'V_s, V_A and the negative corner, against a root-finder',
+  'V-n boundaries': 'V-n envelope and gust lines, from their vertices',
+  'gust factor': 'Gust alleviation factor',
+  'turn load factor': 'Lift-limited and sustained load factor',
+  'specific excess power': 'Specific excess power',
+  'takeoff distances': 'Takeoff distances, integrated in time',
+  'landing distances': 'Landing distances, integrated in time',
 };
 
 /** Quantities compared as an absolute difference, and its unit; the rest are relative. */
@@ -61,6 +69,7 @@ const ABSOLUTE_UNIT: Record<string, string> = {
   'density alt [m]': 'm',
   'ceilings [m]': 'm',
   'climb angle': 'rad',
+  'V-n boundaries': 'g',
 };
 
 const QUANTITY_NOTE: Record<string, string> = {
@@ -168,6 +177,74 @@ function CaseTable({ cases }: { cases: readonly (ValidationCase & { result: Retu
   );
 }
 
+/** Error bins for the POH grids: within 5, 10, 20 % and beyond. */
+function errorClass(error: number | null): string {
+  if (error === null) return 'err err--none';
+  const e = Math.abs(error);
+  return `err err--${e < 0.05 ? 0 : e < 0.1 ? 1 : e < 0.2 ? 2 : 3}`;
+}
+
+const POH_NOTE: Record<PohTable['id'], string> = {
+  climb:
+    'Good at sea level, 10–18 % low at altitude on cold days. The hot side is close since the engine lapse was corrected for temperature in v0.5: before, the hot cells missed by up to 66 %.',
+  'takeoff-roll':
+    '11–20 % short everywhere, worsening with heat: a fixed shortfall in low-speed thrust, plus a temperature effect still a little weak.',
+  'takeoff-total': 'The ground roll’s shortfall carried through, and a climb to 50 ft a little steeper than the POH’s.',
+  'landing-roll':
+    'A uniform 20–24 % short at every altitude and temperature: the braking coefficient (0.4 here, about 0.29 in the POH), not the density effect.',
+  'landing-total':
+    'Within 11 %, but partly by compensation: the 3° approach is longer than the POH’s steeper power-idle one, and the braking shorter. Read the ground roll, not this.',
+};
+
+function PohGrid({ table, cells }: { table: PohTable; cells: readonly CellResult[] }) {
+  const summary = summarise(cells);
+  const at = (h: number, t: number) => cells.find((c) => c.altitude === h && c.temperature === t);
+  const pct = (e: number) => `${e > 0 ? '+' : e < 0 ? '−' : ''}${Math.abs(e * 100).toFixed(0)}`;
+  return (
+    <div className="poh-grid">
+      <h3>{table.title}</h3>
+      <p className="card-sub">
+        {table.conditions} Mean {pct(summary.mean)} %, from {pct(summary.min)} to {pct(summary.max)} % over {summary.cells} cells.
+      </p>
+      <div className="table-scroll">
+        <table className="validation-table poh-table">
+          <thead>
+            <tr>
+              <th scope="col" title="Pressure altitude [ft] by OAT [°C]">ft \ °C</th>
+              {table.temperatures.map((t) => (
+                <th key={t} scope="col" className="n">
+                  {t}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {table.altitudes.map((h) => (
+              <tr key={h}>
+                <th scope="row">{h === 0 ? 'SL' : h.toLocaleString('en-US')}</th>
+                {table.temperatures.map((t) => {
+                  const cell = at(h, t);
+                  if (!cell) return <td key={t} className="n dim">–</td>;
+                  return (
+                    <td
+                      key={t}
+                      className={`n ${errorClass(cell.error)}`}
+                      title={`Model ${cell.model === null ? '–' : Math.round(cell.model).toLocaleString('en-US')}, POH ${cell.published.toLocaleString('en-US')} ${table.unit}`}
+                    >
+                      {cell.error === null ? 'n/a' : `${pct(cell.error)} %`}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="card-foot">{POH_NOTE[table.id]}</p>
+    </div>
+  );
+}
+
 export function ValidationPage() {
   const evaluated = useMemo(() => CASES.map((c) => ({ ...c, result: evaluate(c) })), []);
 
@@ -176,7 +253,19 @@ export function ValidationPage() {
   const passing = notDiscrepancy.filter((c) => c.result.pass).length;
   const checks = counted('check');
   const crossPassing = CROSS_CHECK.checks.filter((c) => c.pass).length;
-  const sources = new Set(evaluated.map((c) => c.source)).size;
+  // Distinct documents: a source is cited by section, so count what precedes the first comma or bracket.
+  const sources = new Set(evaluated.map((c) => c.source.split(/[,(]/)[0]!.trim())).size;
+
+  // The page renders after load, so follow a #fragment once it exists.
+  useEffect(() => {
+    const id = decodeURIComponent(window.location.hash.slice(1));
+    if (id) document.getElementById(id)?.scrollIntoView();
+  }, []);
+  const discrepancies = counted('discrepancy').length;
+  const checksPassing = checks.filter((c) => c.result.pass).length;
+  const worstCheck = Math.max(...checks.map((c) => Math.abs(c.result.relative)));
+  const pohCells = useMemo(() => POH_TABLES.map((table) => ({ table, cells: compareTable(table) })), []);
+  const pohCount = pohCells.reduce((n, t) => n + t.cells.length, 0);
 
   return (
     <div className="app validation">
@@ -213,13 +302,15 @@ export function ValidationPage() {
             {passing} of {notDiscrepancy.length}
           </span>
           <span className="tile-sub">
-            plus {counted('discrepancy').length} known discrepancy, pinned
+            plus {discrepancies} known {discrepancies === 1 ? 'discrepancy' : 'discrepancies'}, pinned
           </span>
         </div>
         <div className="card tile">
           <span className="tile-label">Checks the fit never saw</span>
-          <span className="tile-value">{checks.map((c) => relativeText(c.result.relative)).join(' · ')}</span>
-          <span className="tile-sub">{checks.map((c) => c.quantity.toLowerCase()).join(' · ')}</span>
+          <span className="tile-value">
+            {checksPassing} of {checks.length}
+          </span>
+          <span className="tile-sub">worst {(worstCheck * 100).toFixed(1)} %, and {pohCount} POH table cells below</span>
         </div>
       </div>
 
@@ -238,13 +329,32 @@ export function ValidationPage() {
       </section>
 
       {GROUPS.map((group) => (
-        <section key={group.id} className="card table-card" aria-labelledby={`${group.id}-h`}>
+        <section key={group.id} id={group.id} className="card table-card" aria-labelledby={`${group.id}-h`}>
           <h2 id={`${group.id}-h`}>{group.title}</h2>
           <p className="card-sub">{group.intro}</p>
           <CaseTable cases={evaluated.filter((c) => c.group === group.id)} />
           <p className="card-foot">Source: {[...new Set(evaluated.filter((c) => c.group === group.id).map((c) => c.source))].join('; ')}.</p>
         </section>
       ))}
+
+      <section className="card table-card" aria-labelledby="poh-h" id="poh-tables">
+        <h2 id="poh-h">Cessna 172S POH tables, every cell</h2>
+        <p className="card-sub">
+          The single figures above are the headlines. These are the rest of the evidence: the POH&apos;s climb, takeoff and
+          landing tables at 2,550 lb, transcribed whole, with the model&apos;s error in each cell. Nothing here was fitted,
+          and no cell is left out. Hover a cell for both values.
+        </p>
+        <div className="err-key" aria-hidden="true">
+          <span className="err err--0">within 5 %</span>
+          <span className="err err--1">5–10 %</span>
+          <span className="err err--2">10–20 %</span>
+          <span className="err err--3">over 20 %</span>
+        </div>
+        {pohCells.map(({ table, cells }) => (
+          <PohGrid key={table.id} table={table} cells={cells} />
+        ))}
+        <p className="card-foot">Source: {POH_SOURCE}. The pattern of every table is pinned by tests/poh-tables.test.ts.</p>
+      </section>
 
       <section className="card table-card" aria-labelledby="cross-h">
         <h2 id="cross-h">Independent implementation</h2>
@@ -313,15 +423,25 @@ export function ValidationPage() {
             value. There are no part-power settings yet, so no cruise, range or endurance.
           </li>
           <li>
-            <strong>No flap or gear drag.</strong> Flaps change only the stall speed.
+            <strong>No flap or gear drag.</strong> Flaps change only the stall speed, which is part of why the takeoff
+            and landing distances run short.
+          </li>
+          <li>
+            <strong>Takeoff and landing are first-order,</strong> by Raymer&apos;s method: textbook speed ratios, one
+            second of rotation and of free roll, a 3° approach, Gudmundsson&apos;s tabulated friction, no ground effect
+            and no runway slope.
+          </li>
+          <li>
+            <strong>The V-n diagram is clean-wing only,</strong> with the gust lift slope from the aspect ratio alone and
+            the negative-stall C<sub>L</sub> assumed where it isn&apos;t published.
           </li>
           <li>
             <strong>The ISA deviation holds through the whole column,</strong> and true altitude assumes 1013.25 hPa at
             sea level.
           </li>
           <li>
-            <strong>Climb is steady and wings level.</strong> No acceleration, no climbing turns, and no wind except in
-            the glide physics.
+            <strong>Climb is steady and wings level; turns are level.</strong> Specific excess power shows the energy
+            picture, but nothing is integrated through time: no climb schedules flown, no climbing turns.
           </li>
           <li>
             <strong>CAS, not IAS.</strong> Position error is aircraft-specific calibration data, and isn&apos;t
