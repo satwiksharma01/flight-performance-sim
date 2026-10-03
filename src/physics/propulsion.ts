@@ -3,9 +3,15 @@
  *
  * Three engine models, each the minimum that makes ceilings meaningful:
  *
- * - Piston, normally aspirated: shaft power lapses with density by the
- *   Gagg-Farrar relation, P/P0 = 1.132 sigma - 0.132. Turbocharged: full power
- *   up to a critical altitude, then the same lapse relative to it.
+ * - Piston, normally aspirated: on a standard day, shaft power lapses with
+ *   density by the Gagg-Farrar relation, P/P0 = 1.132 sigma - 0.132. Off
+ *   standard, the relation is evaluated at the standard day's density for the
+ *   pressure altitude, and temperature enters by the engine makers' correction,
+ *   power proportional to 1/sqrt(T) at a given pressure. Feeding the actual
+ *   density to Gagg-Farrar instead makes power fall as 1/T: twice the real
+ *   temperature effect, and the 172S's POH climb table shows it (see
+ *   tests/propulsion.test.ts). Turbocharged: full power up to a critical
+ *   altitude, then the same lapse relative to it.
  * - Turboprop: P/P0 = sigma^m.
  * - Turbofan: T/T0 = sigma^m, m from about 0.7 (high bypass) to 1.
  *
@@ -74,12 +80,16 @@ export function lapseRatio(propulsion: Propulsion, atmosphere: AtmosphereState):
   const sigma = atmosphere.densityRatio;
   switch (propulsion.kind) {
     case 'piston': {
+      // Density ratio this pressure level would have on a standard day, and the
+      // hot- or cold-day correction to power at that pressure.
+      const standardSigma = (sigma * atmosphere.temperature) / atmosphere.standardTemperature;
+      const temperature = Math.sqrt(atmosphere.standardTemperature / atmosphere.temperature);
       const critical = propulsion.criticalAltitude;
-      if (critical === undefined) return gaggFarrar(sigma);
+      if (critical === undefined) return gaggFarrar(standardSigma) * temperature;
       // The turbocharger holds sea-level manifold pressure up to its critical
       // altitude; above it, the engine lapses as if that altitude were sea level.
-      if (atmosphere.pressureAltitude <= critical) return 1;
-      return gaggFarrar(sigma / atPressureAltitude(critical).densityRatio);
+      if (atmosphere.pressureAltitude <= critical) return temperature;
+      return gaggFarrar(standardSigma / atPressureAltitude(critical).densityRatio) * temperature;
     }
     case 'turboprop':
     case 'turbofan':

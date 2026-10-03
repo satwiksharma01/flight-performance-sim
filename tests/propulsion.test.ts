@@ -6,9 +6,10 @@ import {
   powerAvailable,
   propellerEfficiency,
   thrustAvailable,
+  type PistonEngine,
   type Propulsion,
 } from '../src/physics/propulsion.js';
-import { CESSNA_172S } from '../src/data/aircraft/presets.js';
+import { CESSNA_172S, PRESETS } from '../src/data/aircraft/presets.js';
 
 const piston: Propulsion = {
   kind: 'piston',
@@ -75,5 +76,32 @@ describe('propeller thrust', () => {
     const eta = propellerEfficiency(CESSNA_172S.propulsion!, 74 * (1852 / 3600))!;
     expect(eta).toBeGreaterThan(0.6);
     expect(eta).toBeLessThan(0.85);
+  });
+});
+
+describe('piston power on a hot day', () => {
+  const engine = PRESETS.c172.propulsion as PistonEngine;
+
+  it('is Gagg-Farrar at the standard day’s density, times sqrt(T_std / T)', () => {
+    const hot = atPressureAltitude(1829, 30);
+    const standard = atPressureAltitude(1829);
+    expect(lapseRatio(engine, hot)).toBeCloseTo(
+      gaggFarrar(standard.densityRatio) * Math.sqrt(standard.temperature / hot.temperature),
+      12,
+    );
+  });
+
+  it('falls about 1 % per 6 °C at constant pressure altitude, not 1 % per 3 °C', () => {
+    // Gagg-Farrar fed the actual density makes power fall as 1/T, twice the
+    // engine makers' 1/sqrt(T). The 172S's POH climb table shows which is right:
+    // see tests/poh-tables.test.ts.
+    const cool = lapseRatio(engine, atPressureAltitude(0, -15));
+    const warm = lapseRatio(engine, atPressureAltitude(0, 15));
+    expect(cool / warm - 1).toBeCloseTo(Math.sqrt(303.15 / 273.15) - 1, 12); // 5.4 % over 30 °C
+  });
+
+  it('is unchanged on a standard day', () => {
+    const std = atPressureAltitude(3000);
+    expect(lapseRatio(engine, std)).toBeCloseTo(gaggFarrar(std.densityRatio), 12);
   });
 });
