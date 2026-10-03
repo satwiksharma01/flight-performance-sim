@@ -15,8 +15,8 @@ import type { Aircraft } from '../../physics/aero.js';
  *
  * Checks the calibration never saw (tests/references.test.ts):
  * - V_x 60.9 kt against the published 62 KIAS
- * - service ceiling 13,972 ft against the published 14,000 ft
- * - maximum level speed 114.6 KTAS against the published 126: 9 % low. The
+ * - service ceiling 13,944 ft against the published 14,000 ft
+ * - maximum level speed 114.8 KTAS against the published 126: 9 % low. The
  *   glide polar includes a windmilling propeller's drag, which overstates the
  *   drag of powered flight at high speed. The error is pinned, not tuned away.
  *
@@ -44,8 +44,8 @@ export const CESSNA_172S: Aircraft = {
   propulsion: {
     kind: 'piston',
     power: 180 * 745.699872, // Lycoming IO-360-L2A, 180 hp at 2,700 rpm
-    // Fitted to the POH best rate of climb, 730 ft/min at 74 KIAS, sea level
-    propeller: { staticThrust: 3060, zeroThrustSpeed: 172 },
+    // Fitted, with the exact climb, to the POH best rate of climb: 730 ft/min at 74 KIAS, sea level
+    propeller: { staticThrust: 3035, zeroThrustSpeed: 175.9 },
   },
 };
 

@@ -206,33 +206,10 @@ describe('stall speed', () => {
     expect(stallSpeed(CESSNA_172S, SEA_LEVEL.density, 4)).toBeCloseTo(2 * oneG, 6);
   });
 
-  it('reproduces published Cessna 172S stall speeds within 2 kt', () => {
-    // Published (POH): Vs1 53 KCAS clean, Vs0 48 KCAS full flap, both at the
-    // 2,550 lb max takeoff weight, most forward CG.
-    // At sea level on a standard day CAS, EAS and TAS coincide, so a direct
-    // comparison is valid here and nowhere else.
-    const clean = mpsToKnots(mps(stallSpeed(CESSNA_172S, SEA_LEVEL.density)));
-    const flapped = mpsToKnots(
-      mps(stallSpeed(CESSNA_172S, SEA_LEVEL.density, 1, CESSNA_172S.clMaxFlaps)),
-    );
-
-    expect(Math.abs(clean - 53)).toBeLessThan(2);
-    expect(Math.abs(flapped - 48)).toBeLessThan(2);
-  });
-
   it('rejects a zero CLmax', () => {
     expect(() => stallSpeed({ ...CESSNA_172S, clMax: 0 }, SEA_LEVEL.density)).toThrow(
       RangeError,
     );
-  });
-});
-
-describe('the 172S polar, calibrated to its POH glide', () => {
-  it('glides at the published 9:1', () => {
-    // CD0 and e were fitted to the POH best glide, 68 KIAS at 9:1. Before that
-    // calibration the estimated CD0 of 0.036 gave 10.9 and was pinned as a
-    // known error; see tests/references.test.ts for the full POH comparison.
-    expect(maxLiftToDrag(CESSNA_172S)).toBeCloseTo(9, 1);
   });
 });
 

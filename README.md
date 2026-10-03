@@ -149,10 +149,10 @@ the Cessna 172S comes from exactly two POH figures:
 - the propeller's thrust line: best rate of climb, 730 ft/min at 74 KIAS
 
 Two figures the fit never saw then test it: V_x comes out at 60.9 kt against the
-published 62, and the service ceiling at 13,972 ft against 14,000.
+published 62, and the service ceiling at 13,944 ft against 14,000.
 
 **Known model limits are pinned, not hidden.** The 172S's maximum level speed comes
-out at 114.6 KTAS against the published 126, 9 % low. The polar was fitted to a glide
+out at 114.8 KTAS against the published 126, 9 % low. The polar was fitted to a glide
 flown with the propeller windmilling, and that drag doesn't exist in powered flight.
 A test pins the size of the error rather than retuning it away. The polar has no wave
 drag either, so the charts shade everything above Mach 0.7, draw nothing past Mach

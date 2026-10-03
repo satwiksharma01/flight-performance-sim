@@ -10,34 +10,12 @@ import {
 } from '../src/physics/atmosphere.js';
 import { P0, RHO0, T0 } from '../src/physics/constants.js';
 
-/**
- * Reference values from the US Standard Atmosphere 1976 / ISO 2533 tables.
- * Tabulated against *geopotential* altitude, so the tests feed geopotential
- * altitude in via `geometricAltitude()` rather than comparing at geometric
- * altitude and absorbing a ~0.2 % error as "tolerance".
- */
-const ISA_TABLE = [
-  { h: 0, T: 288.15, p: 101325, rho: 1.225 },
-  { h: 5000, T: 255.65, p: 54019.9, rho: 0.736116 },
-  { h: 11000, T: 216.65, p: 22632.1, rho: 0.363918 },
-  { h: 20000, T: 216.65, p: 5474.89, rho: 0.0880349 },
-  { h: 32000, T: 228.65, p: 868.019, rho: 0.0132250 },
-];
-
 const relativeError = (actual: number, expected: number) =>
   Math.abs(actual - expected) / Math.abs(expected);
 
-describe('ISA against published tables', () => {
-  for (const row of ISA_TABLE) {
-    it(`matches the standard table at ${row.h} m geopotential`, () => {
-      const state = isa(geometricAltitude(row.h));
-
-      expect(relativeError(state.temperature, row.T)).toBeLessThan(1e-6);
-      expect(relativeError(state.pressure, row.p)).toBeLessThan(1e-3);
-      expect(relativeError(state.density, row.rho)).toBeLessThan(1e-3);
-    });
-  }
-
+// The published USSA-1976 table lives in src/data/validation/cases.ts, checked
+// by tests/published.test.ts and shown on the /validation page.
+describe('ISA at sea level', () => {
   it('reproduces sea-level standard conditions exactly', () => {
     const sl = isa(0);
     expect(sl.temperature).toBeCloseTo(T0, 10);
