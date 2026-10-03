@@ -166,8 +166,8 @@ export function App() {
         <div>
           <h1>Flight Performance Simulator</h1>
           <p className="tagline">
-            Drag, power and lift-to-drag for steady level flight, from a closed-form physics core. Every scenario is a
-            link.
+            Drag, power, climb and glide, from a physics core tested against an independent implementation and published
+            data. Every scenario is a link.
           </p>
         </div>
         <div className="top-actions">

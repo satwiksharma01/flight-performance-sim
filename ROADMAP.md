@@ -331,16 +331,21 @@ curve move. A complete product at a tiny scope.
 - [x] Custom aircraft editor — *validated inline; edits stay delta-encoded in the URL*
 
 ### v0.3 — Propulsion and climb
-- [ ] Piston / turboprop / turbofan lapse models
-- [ ] Exact climb solution + small-angle toggle showing the delta
-- [ ] ROC vs velocity, ROC vs altitude
-- [ ] Absolute and service ceiling
-- [ ] Glide: best distance vs minimum sink
+- [x] Piston / turboprop / turbofan lapse models — *plus turbocharging; propeller
+      thrust as a straight line from static thrust, capped at η = 1*
+- [x] Exact climb solution + small-angle toggle showing the delta — *both drawn on
+      the rate-of-climb chart, the difference stated in the Climb card*
+- [x] ROC vs velocity, ROC vs altitude
+- [x] Absolute and service ceiling
+- [x] Glide: best distance vs minimum sink — *plus best glide in wind (physics), and
+      the sink polar as a chart*
 
 ### v0.4 — The validation release *(the credibility release)*
-- [ ] Python reference implementation
-- [ ] Cross-implementation test to 1e-9
-- [ ] Cessna 172S validation vs published data
+- [x] Python reference implementation — *`validation/reference.py`, `npm run validate`*
+- [x] Cross-implementation test — *1e-16 for closed forms; 1e-8 where an optimiser
+      or root-finder sets the precision*
+- [x] Cessna 172S validation vs published data — *calibrated on stall, glide and
+      climb; checked on V_x and service ceiling; V_max discrepancy pinned*
 - [ ] Public `/validation` page
 - [ ] CI running both test suites
 
