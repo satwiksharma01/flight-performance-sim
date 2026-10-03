@@ -28,7 +28,7 @@ function scenario(overrides: Partial<Scenario>): Scenario {
 }
 
 function view(axis: SpeedAxis, unit: ViewSettings['unit'] = 'kt', system: ViewSettings['system'] = 'si'): ViewSettings {
-  return { axis, unit, system };
+  return { axis, unit, system, tab: 'curves' };
 }
 
 function marker(model: ReturnType<typeof buildChartModel>, kind: string) {

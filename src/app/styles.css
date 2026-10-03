@@ -23,6 +23,7 @@
   --critical: #d03b3b;
   --warning: #b77900;
   --good: #0a7d0a;
+  --envelope: rgba(42, 120, 214, 0.1);
   --radius: 10px;
   --font: system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
@@ -47,6 +48,7 @@
     --critical: #e66767;
     --warning: #fab219;
     --good: #0ca30c;
+    --envelope: rgba(57, 135, 229, 0.16);
   }
 }
 
@@ -69,6 +71,7 @@
   --critical: #e66767;
   --warning: #fab219;
   --good: #0ca30c;
+  --envelope: rgba(57, 135, 229, 0.16);
 }
 
 *,
@@ -593,6 +596,123 @@ input[type='range'] {
   display: none;
 }
 
+/* --- Tabs ---------------------------------------------------------------- */
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  width: fit-content;
+  max-width: 100%;
+}
+
+.tab {
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 550;
+  padding: 7px 14px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.tab:hover {
+  color: var(--ink);
+}
+
+.tab--active {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.tab-intro {
+  font-size: 13px;
+  color: var(--ink-2);
+  max-width: 100ch;
+}
+
+.chart-note {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+}
+
+.chart-note p {
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+/* --- Segment bar: a distance split into its phases, to scale --------------- */
+
+.segments {
+  display: grid;
+  gap: 8px;
+}
+
+.segments-bar {
+  display: flex;
+  height: 14px;
+  border-radius: 4px;
+  overflow: hidden;
+  gap: 2px;
+}
+
+.segment {
+  flex-basis: 0;
+  min-width: 3px;
+}
+
+.segment--1 {
+  background: var(--series-1);
+}
+
+.segment--2 {
+  background: var(--series-3);
+}
+
+.segment--3 {
+  background: var(--series-2);
+}
+
+.segment--4 {
+  background: var(--muted);
+}
+
+.segments-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-size: 12.5px;
+}
+
+.segments-key li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
 /* --- Tables --------------------------------------------------------------- */
 
 .tables {
@@ -892,6 +1012,17 @@ code {
     display: flex;
     flex-direction: column;
     gap: 16px;
+    /* Stretch, not the desktop grid's start: a chart sized to its canvas
+       would never shrink when the window narrows. */
+    align-items: stretch;
+  }
+
+  .layout .tabs {
+    order: 1;
+  }
+
+  .layout .tab-intro {
+    order: 1;
   }
 
   .main,
@@ -899,25 +1030,25 @@ code {
     display: contents;
   }
 
-  .tiles {
+  .layout .tiles {
     order: 1;
   }
 
-  .chart.chart--wide {
+  .layout .chart.chart--wide {
     order: 2;
   }
 
-  .controls {
+  .layout .controls {
     order: 3;
     position: static;
     max-height: none;
   }
 
-  .chart {
+  .layout .chart {
     order: 4;
   }
 
-  .tables {
+  .layout .tables {
     order: 5;
     grid-template-columns: minmax(0, 1fr);
   }
@@ -935,4 +1066,72 @@ code {
   .fields {
     grid-template-columns: 1fr;
   }
+}
+
+/* --- POH tables, cell by cell ---------------------------------------------- */
+
+.poh-grid {
+  display: grid;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.poh-grid h3 {
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.validation-table.poh-table th,
+.validation-table.poh-table td {
+  padding: 4px 6px;
+  font-size: 12.5px;
+}
+
+.validation-table.poh-table {
+  width: auto;
+  min-width: 0;
+}
+
+.poh-table th[scope='row'] {
+  min-width: 0;
+  white-space: nowrap;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
+.err {
+  font-variant-numeric: tabular-nums;
+}
+
+.err--0 {
+  background: color-mix(in srgb, var(--good) 14%, transparent);
+}
+
+.err--1 {
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+}
+
+.err--2 {
+  background: color-mix(in srgb, var(--warning) 26%, transparent);
+}
+
+.err--3 {
+  background: color-mix(in srgb, var(--critical) 24%, transparent);
+}
+
+.err-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.err-key .err {
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+section[id] {
+  scroll-margin-top: 16px;
 }

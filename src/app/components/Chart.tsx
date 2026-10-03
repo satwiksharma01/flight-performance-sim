@@ -7,10 +7,12 @@
  * structure changes (its series, labels, or the colour scheme).
  *
  * Everything uPlot doesn't draw natively is painted in its hooks:
- * - under the series: shaded bands (below stall, beyond the model) and the
+ * - under the series: shaded bands (below stall, beyond the model), shaded
+ *   regions, a filled envelope, polylines such as contours, and the
  *   characteristic-speed hairlines
- * - over them: marker labels in the top padding, the selected point, and
- *   direct labels placed where each line is furthest from its neighbours
+ * - over them: marker labels in the top padding, polyline labels, the
+ *   selected point, and direct labels placed where each line is furthest from
+ *   its neighbours
  */
 
 import { useEffect, useRef } from 'react';
@@ -27,6 +29,28 @@ export interface ChartSeries {
   readonly dash?: readonly number[];
   /** Text drawn beside the line. Omit for single-series charts, where the title names it */
   readonly directLabel?: string;
+  /** Draw points only, no line: for published data over a model curve */
+  readonly pointsOnly?: boolean;
+  /** Thinner and fainter: reference lines such as constant turn radius */
+  readonly faint?: boolean;
+}
+
+/** Polylines in data coordinates, drawn under the series: contours, boundaries. */
+export interface ChartPath {
+  readonly lines: readonly (readonly (readonly [number, number])[])[];
+  readonly colorVar: string;
+  readonly width?: number;
+  readonly dash?: readonly number[];
+  /** Drawn at the middle of the longest polyline, with a halo */
+  readonly label?: string;
+}
+
+/** A rectangle in data coordinates, shaded like a band. */
+export interface ChartRegion {
+  readonly x0: number;
+  readonly x1: number;
+  readonly y0: number;
+  readonly y1: number;
 }
 
 export interface ChartMarker {
@@ -67,9 +91,21 @@ export interface ChartProps {
   readonly height: number;
   /** Changing this rebuilds the chart with freshly read colours */
   readonly theme: string;
-  /** Called with an x-axis value when the chart is clicked or dragged */
-  readonly onPick: (x: number) => void;
+  /** Called with the x- and y-axis values when the chart is clicked or dragged */
+  readonly onPick: (x: number, y: number) => void;
   readonly wide?: boolean;
+  /** The region between two curves, filled: the V-n diagram's envelope */
+  readonly fill?: {
+    readonly upper: readonly (number | null)[];
+    readonly lower: readonly (number | null)[];
+    readonly colorVar: string;
+  };
+  readonly paths?: readonly ChartPath[];
+  readonly regions?: readonly ChartRegion[];
+  /** Text beside the first selected dot */
+  readonly selectedLabel?: string;
+  /** Charts with the same key share a cursor. Default: the speed charts' key */
+  readonly syncKey?: string;
 }
 
 interface Theme {
@@ -81,6 +117,8 @@ interface Theme {
   readonly surface: string;
   readonly band: string;
   readonly series: readonly string[];
+  /** Any other colour a chart asks for, by custom property */
+  readonly vars: Readonly<Record<string, string>>;
 }
 
 const FONT_FAMILY = 'system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -88,10 +126,11 @@ const FONT_FAMILY = 'system-ui, -apple-system, "Segoe UI", sans-serif';
 const TOP_PADDING = 42;
 const LABEL_ROW = 17;
 
-function readTheme(series: readonly ChartSeries[]): Theme {
+function readTheme(series: readonly ChartSeries[], extra: readonly string[]): Theme {
   const style = getComputedStyle(document.documentElement);
   const v = (name: string) => style.getPropertyValue(name).trim();
   return {
+    vars: Object.fromEntries(extra.map((name) => [name, v(name)])),
     ink: v('--ink'),
     ink2: v('--ink-2'),
     muted: v('--muted'),
@@ -122,19 +161,27 @@ export function Chart(props: ChartProps) {
   const latest = useRef(props);
   latest.current = props;
 
+  const extraVars = [
+    ...(props.fill ? [props.fill.colorVar] : []),
+    ...(props.paths ?? []).map((path) => path.colorVar),
+  ];
   const structure = [
     props.theme,
     props.height,
     props.xLabel,
     props.yLabel,
-    ...props.series.map((s) => `${s.label}|${s.colorVar}|${s.dash?.join(',') ?? ''}|${s.directLabel ?? ''}`),
+    props.syncKey ?? '',
+    extraVars.join(','),
+    ...props.series.map(
+      (s) => `${s.label}|${s.colorVar}|${s.dash?.join(',') ?? ''}|${s.directLabel ?? ''}|${s.pointsOnly ?? ''}|${s.faint ?? ''}`,
+    ),
   ].join('§');
 
   useEffect(() => {
     const el = host.current;
     if (!el) return;
 
-    const theme = readTheme(latest.current.series);
+    const theme = readTheme(latest.current.series, extraVars);
     // Canvas pixels per CSS pixel are read on every draw, never cached here:
     // the ratio changes when the window moves to a screen of another density.
     const font = (size: number, weight = 400) =>
@@ -173,6 +220,76 @@ export function Chart(props: ChartProps) {
         ctx.fillStyle = theme.band;
         ctx.fillRect(x0, bbox.top, x1 - x0, bbox.height);
       }
+
+      // Everything below is clipped to the plot.
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(bbox.left, bbox.top, bbox.width, bbox.height);
+      ctx.clip();
+
+      if (p.regions && p.regions.length > 0) {
+        // One path, filled once: overlapping cells must not stack their alpha
+        // into visible seams.
+        ctx.fillStyle = theme.band;
+        ctx.beginPath();
+        for (const r of p.regions) {
+          const x0 = Math.floor(u.valToPos(r.x0, 'x', true));
+          const x1 = Math.ceil(u.valToPos(r.x1, 'x', true));
+          const y0 = Math.floor(u.valToPos(r.y1, 'y', true));
+          const y1 = Math.ceil(u.valToPos(r.y0, 'y', true));
+          ctx.rect(x0, y0, x1 - x0, y1 - y0);
+        }
+        ctx.fill('nonzero');
+      }
+
+      if (p.fill) {
+        // One polygon per unbroken run: along the upper curve, back along the lower.
+        ctx.fillStyle = theme.vars[p.fill.colorVar] ?? theme.band;
+        const { upper, lower } = p.fill;
+        let run: number[] = [];
+        const flush = () => {
+          if (run.length > 1) {
+            ctx.beginPath();
+            run.forEach((i, k) => {
+              const x = u.valToPos(p.x[i]!, 'x', true);
+              const y = u.valToPos(upper[i]!, 'y', true);
+              if (k === 0) ctx.moveTo(x, y);
+              else ctx.lineTo(x, y);
+            });
+            for (let k = run.length - 1; k >= 0; k--) {
+              const i = run[k]!;
+              ctx.lineTo(u.valToPos(p.x[i]!, 'x', true), u.valToPos(lower[i]!, 'y', true));
+            }
+            ctx.closePath();
+            ctx.fill();
+          }
+          run = [];
+        };
+        p.x.forEach((_, i) => {
+          if (upper[i] == null || lower[i] == null) flush();
+          else run.push(i);
+        });
+        flush();
+      }
+
+      for (const path of p.paths ?? []) {
+        ctx.strokeStyle = theme.vars[path.colorVar] ?? theme.ink2;
+        ctx.lineWidth = (path.width ?? 1.25) * px;
+        ctx.setLineDash(path.dash ? path.dash.map((d) => d * px) : []);
+        ctx.lineJoin = 'round';
+        for (const line of path.lines) {
+          ctx.beginPath();
+          line.forEach(([x, y], k) => {
+            const cx = u.valToPos(x, 'x', true);
+            const cy = u.valToPos(y, 'y', true);
+            if (k === 0) ctx.moveTo(cx, cy);
+            else ctx.lineTo(cx, cy);
+          });
+          ctx.stroke();
+        }
+      }
+      ctx.setLineDash([]);
+      ctx.restore();
 
       ctx.lineWidth = px;
       for (const m of p.markers) {
@@ -226,6 +343,22 @@ export function Chart(props: ChartProps) {
         ctx.font = font(9.5, 600);
         ctx.fillText(m.subscript, start + wMain + px, y + 3 * px);
       }
+
+      // Path labels, at the middle of each path's longest line.
+      ctx.font = font(10.5, 500);
+      ctx.textAlign = 'center';
+      for (const path of p.paths ?? []) {
+        if (!path.label) continue;
+        const longest = [...path.lines].sort((a, b) => b.length - a.length)[0];
+        const mid = longest?.[Math.floor(longest.length / 2)];
+        if (!mid) continue;
+        const x = u.valToPos(mid[0], 'x', true);
+        const y = u.valToPos(mid[1], 'y', true);
+        if (x < bbox.left || x > right || y < bbox.top || y > bbox.top + bbox.height) continue;
+        ctx.fillStyle = theme.vars[path.colorVar] ?? theme.ink2;
+        haloText(ctx, path.label, x, y + 4 * px, theme.surface);
+      }
+      ctx.textAlign = 'left';
 
       // Band labels, at the bottom of their band.
       ctx.font = font(11);
@@ -313,6 +446,15 @@ export function Chart(props: ChartProps) {
           ctx.strokeStyle = theme.surface;
           ctx.fill();
           ctx.stroke();
+          if (i === 0 && p.selectedLabel) {
+            ctx.font = font(11.5, 600);
+            const w = ctx.measureText(p.selectedLabel).width;
+            const leftSide = sx + 10 * px + w > right;
+            ctx.textAlign = leftSide ? 'right' : 'left';
+            ctx.fillStyle = theme.ink;
+            const ty = Math.max(sy - 8 * px, bbox.top + 12 * px);
+            haloText(ctx, p.selectedLabel, leftSide ? sx - 10 * px : sx + 10 * px, ty, theme.surface);
+          }
         });
       }
 
@@ -350,14 +492,20 @@ export function Chart(props: ChartProps) {
         ...latest.current.series.map((s, i) => ({
           label: s.label,
           stroke: theme.series[i] ?? theme.ink,
-          width: 2,
+          width: s.faint ? 1 : 2,
           ...(s.dash ? { dash: [...s.dash] } : {}),
-          points: { show: false },
+          ...(s.faint ? { alpha: 0.55 } : {}),
+          ...(s.pointsOnly
+            ? {
+                paths: () => null,
+                points: { show: true, size: 7, width: 1.5, fill: theme.surface, stroke: theme.series[i] ?? theme.ink },
+              }
+            : { points: { show: false } }),
           value: (_u: uPlot, v: number | null) => (v == null ? '–' : latest.current.formatY(v)),
         })),
       ],
       cursor: {
-        sync: { key: 'performance' },
+        sync: { key: latest.current.syncKey ?? 'performance' },
         drag: { x: false, y: false, setScale: false },
         points: {
           size: 9,
@@ -380,9 +528,10 @@ export function Chart(props: ChartProps) {
     let dragging = false;
     const pick = (e: PointerEvent) => {
       const rect = over.getBoundingClientRect();
-      const { xMax, onPick } = latest.current;
+      const { xMax, yMax, yMin = 0, onPick } = latest.current;
       const x = u.posToVal(e.clientX - rect.left, 'x');
-      onPick(Math.min(Math.max(x, xMax / 1000), xMax));
+      const y = u.posToVal(e.clientY - rect.top, 'y');
+      onPick(Math.min(Math.max(x, xMax / 1000), xMax), Math.min(Math.max(y, yMin), yMax));
     };
     const down = (e: PointerEvent) => {
       if (e.button !== 0) return;

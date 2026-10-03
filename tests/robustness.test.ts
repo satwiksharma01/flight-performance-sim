@@ -71,7 +71,7 @@ function allFinite(values: readonly number[]): boolean {
 }
 
 function check(scenario: Scenario, axis: SpeedAxis, unit: SpeedUnit) {
-  const model = buildChartModel(scenario, { axis, unit, system: unit === 'kt' ? 'us' : 'si' });
+  const model = buildChartModel(scenario, { axis, unit, system: unit === 'kt' ? 'us' : 'si', tab: 'curves' });
   const w = model.window;
 
   expect(allFinite([w.xMax, w.dragMax, w.powerMax, w.liftToDragMax])).toBe(true);

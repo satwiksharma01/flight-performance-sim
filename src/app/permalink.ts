@@ -10,7 +10,7 @@
  *   `?ac=c172&m=900` rather than every parameter spelled out.
  *
  * - View settings, under their own keys (`x` for the axis, `u` for the speed
- *   unit, `sys` for SI or US units).
+ *   unit, `sys` for SI or US units, `tab` for the envelope or field tab).
  *   They don't change any number, but a link pasted into a report should open
  *   on the chart its author was looking at. Like the scenario keys, these are a
  *   public format: append-only.
@@ -18,9 +18,9 @@
 
 import { getPreset } from '../data/aircraft/presets.js';
 import { decodeScenario, encodeScenario, type Scenario } from '../state/url.js';
-import { DEFAULT_VIEW, type SpeedAxis, type SpeedUnit, type UnitSystem, type ViewSettings } from './model.js';
+import { DEFAULT_VIEW, TABS, type SpeedAxis, type SpeedUnit, type Tab, type UnitSystem, type ViewSettings } from './model.js';
 
-const VIEW_KEY = { axis: 'x', unit: 'u', system: 'sys' } as const;
+const VIEW_KEY = { axis: 'x', unit: 'u', system: 'sys', tab: 'tab' } as const;
 
 const AXES: readonly SpeedAxis[] = ['tas', 'eas', 'cas', 'mach'];
 const UNITS: readonly SpeedUnit[] = ['kt', 'mps', 'kmh'];
@@ -48,6 +48,10 @@ function isUnit(value: string): value is SpeedUnit {
 
 function isSystem(value: string): value is UnitSystem {
   return (SYSTEMS as readonly string[]).includes(value);
+}
+
+function isTab(value: string): value is Tab {
+  return (TABS as readonly string[]).includes(value);
 }
 
 /** Read a query string. Like `decodeScenario`, this never throws. */
@@ -81,7 +85,14 @@ export function readPermalink(query: string): ReadResult {
     else problems.push(`Unknown unit system "${rawSystem}". Expected one of: ${SYSTEMS.join(', ')}.`);
   }
 
-  return { scenario, basePresetId, view: { axis, unit, system }, problems };
+  let tab = DEFAULT_VIEW.tab;
+  const rawTab = params.get(VIEW_KEY.tab);
+  if (rawTab !== null) {
+    if (isTab(rawTab)) tab = rawTab;
+    else problems.push(`Unknown tab "${rawTab}". Expected one of: ${TABS.join(', ')}.`);
+  }
+
+  return { scenario, basePresetId, view: { axis, unit, system, tab }, problems };
 }
 
 /** Write a query string, without the leading `?`. */
@@ -97,6 +108,7 @@ export function writePermalink({ scenario, basePresetId, view }: Permalink): str
   if (view.axis !== DEFAULT_VIEW.axis) params.set(VIEW_KEY.axis, view.axis);
   if (view.unit !== DEFAULT_VIEW.unit) params.set(VIEW_KEY.unit, view.unit);
   if (view.system !== DEFAULT_VIEW.system) params.set(VIEW_KEY.system, view.system);
+  if (view.tab !== DEFAULT_VIEW.tab) params.set(VIEW_KEY.tab, view.tab);
   return params.toString();
 }
 

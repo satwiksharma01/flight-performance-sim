@@ -6,7 +6,13 @@ import {
   G0,
   PROPULSION_LIMITS,
   bankForLoadFactor,
+  RUNWAY_SURFACES,
+  STRUCTURE_LIMITS,
+  SURFACE_IDS,
+  weight,
   type Aircraft,
+  type StructuralLimits,
+  type SurfaceId,
   type EngineKind,
   type Propulsion,
 } from '../../physics/index.js';
@@ -91,7 +97,40 @@ function aircraftFields(system: UnitSystem): readonly (FieldDef & { readonly key
       ...range('clMaxFlaps'),
       ...identity,
     },
+    {
+      key: 'clMaxTakeoff',
+      id: 'clto',
+      label: 'CL max, takeoff flap',
+      hint: 'Maximum lift coefficient at the takeoff flap setting. Leave blank to take off clean.',
+      optional: true,
+      ...range('clMaxTakeoff'),
+      ...identity,
+    },
   ];
+}
+
+/** Structural limits, speeds in knots EAS. */
+function structureFields(): readonly (FieldDef & { readonly key: keyof StructuralLimits })[] {
+  const L = STRUCTURE_LIMITS;
+  const kt = { unit: 'KEAS', toDisplay: (v: number) => v / MPS_PER_KT, fromDisplay: (v: number) => v * MPS_PER_KT };
+  return [
+    { key: 'nPositive', id: 'nmax', label: 'Limit load factor, +', hint: '3.8 normal, 4.4 utility, 6 aerobatic category.', min: L.nPositive.min, max: L.nPositive.max, ...identity },
+    { key: 'nNegative', id: 'nmin', label: 'Limit load factor, −', hint: '0.4 of the positive limit for normal and utility, 0.5 for aerobatic.', min: L.nNegative.min, max: L.nNegative.max, ...identity },
+    { key: 'cruiseSpeed', id: 'vc', label: 'Design cruise, V_C', hint: 'Usually V_NO.', min: L.cruiseSpeed.min, max: L.cruiseSpeed.max, ...kt },
+    { key: 'diveSpeed', id: 'vd', label: 'Design dive, V_D', hint: 'V_NE is 0.9 V_D.', min: L.diveSpeed.min, max: L.diveSpeed.max, ...kt },
+    { key: 'clMin', id: 'clneg', label: 'CL at negative stall', hint: 'Rarely published; about −1 for a cambered light-aircraft wing.', min: L.clMin.min, max: L.clMin.max, ...identity },
+  ];
+}
+
+/**
+ * Starting limits for an aircraft that has none: normal category, with V_C at
+ * the 14 CFR 23.335 minimum, 33 sqrt(W/S) knots (W/S in lb/ft²), and V_D at
+ * 1.4 V_C. For the 172S that gives V_C = 126 kt, its published V_NO.
+ */
+export function defaultStructure(aircraft: Aircraft): StructuralLimits {
+  const psf = (weight(aircraft.mass) / aircraft.wingArea) / 47.880258980;
+  const vc = Math.min(Math.max(33 * Math.sqrt(psf) * MPS_PER_KT, STRUCTURE_LIMITS.cruiseSpeed.min), STRUCTURE_LIMITS.cruiseSpeed.max / 1.4);
+  return { nPositive: 3.8, nNegative: -1.52, cruiseSpeed: vc, diveSpeed: 1.4 * vc, clMin: Math.max(-0.65 * aircraft.clMax, STRUCTURE_LIMITS.clMin.min) };
 }
 
 /** The fields an engine of this kind has, each with a way to set it. */
@@ -205,8 +244,7 @@ function validate(def: FieldDef, raw: string): { value: number | null } | { erro
   if (raw.trim() === '') return def.optional ? { value: null } : { error: 'Enter a number.' };
   const value = Number(raw);
   if (!Number.isFinite(value)) return { error: 'Enter a number.' };
-  const min = def.toDisplay(def.min);
-  const max = def.toDisplay(def.max);
+  const [min, max] = [def.toDisplay(def.min), def.toDisplay(def.max)].sort((a, b) => a - b) as [number, number];
   if (value < min * (1 - 1e-9) || value > max * (1 + 1e-9)) {
     const fmt = (v: number) => Number(v.toPrecision(4)).toLocaleString('en-US', { maximumFractionDigits: 6 });
     return { error: `Between ${fmt(min)} and ${fmt(max)}.` };
@@ -322,6 +360,58 @@ function EngineEditor({
   );
 }
 
+function StructureEditor({
+  aircraft,
+  onChange,
+}: {
+  aircraft: Aircraft;
+  onChange: (structure: StructuralLimits | undefined) => void;
+}) {
+  const id = useId();
+  const structure = aircraft.structure;
+  const [problem, setProblem] = useState<string | null>(null);
+  return (
+    <div className="engine-editor">
+      <div className="field">
+        <label htmlFor={id}>Structural limits</label>
+        <select
+          id={id}
+          value={structure ? 'set' : 'none'}
+          onChange={(e) => {
+            setProblem(null);
+            onChange(e.target.value === 'none' ? undefined : defaultStructure(aircraft));
+          }}
+        >
+          <option value="none">None: no V-n diagram</option>
+          <option value="set">Set</option>
+        </select>
+      </div>
+      {structure && (
+        <div className="fields">
+          {structureFields().map((def) => (
+            <NumberField
+              key={def.id}
+              def={def}
+              value={structure[def.key]}
+              onCommit={(v) => {
+                if (v === null) return;
+                const next = { ...structure, [def.key]: v };
+                if (next.diveSpeed <= next.cruiseSpeed) {
+                  setProblem('V_D must be faster than V_C.');
+                  return;
+                }
+                setProblem(null);
+                onChange(next);
+              }}
+            />
+          ))}
+          {problem && <span className="field-error">{problem}</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AircraftPanel({
   aircraft,
   presetId,
@@ -329,6 +419,7 @@ export function AircraftPanel({
   onPreset,
   onEdit,
   onEngine,
+  onStructure,
   system,
 }: {
   aircraft: Aircraft;
@@ -338,6 +429,7 @@ export function AircraftPanel({
   onPreset: (id: PresetId) => void;
   onEdit: (key: AircraftKey, value: number | null) => void;
   onEngine: (engine: Propulsion | undefined) => void;
+  onStructure: (structure: StructuralLimits | undefined) => void;
 }) {
   const id = useId();
   const modified = presetId === null;
@@ -378,6 +470,7 @@ export function AircraftPanel({
           ))}
         </div>
         <EngineEditor engine={aircraft.propulsion} system={system} onChange={onEngine} />
+        <StructureEditor aircraft={aircraft} onChange={onStructure} />
       </details>
     </section>
   );
@@ -423,6 +516,53 @@ function Slider({
 }
 
 export const ALTITUDE_MAX_FT = 45_000;
+
+/** The runway: surface and wind, for the takeoff and landing tab. */
+export function RunwayPanel({
+  surface,
+  headwind,
+  unit,
+  onSurface,
+  onHeadwind,
+}: {
+  surface: SurfaceId;
+  headwind: number;
+  unit: SpeedUnit;
+  onSurface: (surface: SurfaceId) => void;
+  onHeadwind: (metresPerSecond: number) => void;
+}) {
+  const id = useId();
+  const perUnit = unit === 'kt' ? MPS_PER_KT : unit === 'kmh' ? 1 / 3.6 : 1;
+  const shown = headwind / perUnit;
+  const range = unit === 'kt' ? [-10, 30, 1] : unit === 'kmh' ? [-20, 55, 1] : [-5, 15, 0.5];
+  const name = UNIT_NAME[unit];
+  return (
+    <section className="panel-section" aria-labelledby={`${id}-h`}>
+      <h2 id={`${id}-h`}>Runway</h2>
+      <div className="field">
+        <label htmlFor={id}>Surface</label>
+        <select id={id} value={surface} onChange={(e) => onSurface(e.target.value as SurfaceId)}>
+          {SURFACE_IDS.map((sid) => (
+            <option key={sid} value={sid}>
+              {RUNWAY_SURFACES[sid].label}
+            </option>
+          ))}
+        </select>
+      </div>
+      <Slider
+        label="Wind along the runway"
+        value={shown}
+        min={range[0]!}
+        max={range[1]!}
+        step={range[2]!}
+        readout={
+          shown === 0 ? 'calm' : shown > 0 ? `${num(shown, unit === 'mps' ? 1 : 0)} ${name} head` : `${num(-shown, unit === 'mps' ? 1 : 0)} ${name} tail`
+        }
+        onChange={(v) => onHeadwind(v * perUnit)}
+      />
+    </section>
+  );
+}
 
 /** FL350 for 35,000 ft: a flight level is pressure altitude in hundreds of feet. */
 function flightLevel(feet: number): string {

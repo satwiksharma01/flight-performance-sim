@@ -29,7 +29,7 @@ describe('writePermalink', () => {
   });
 
   it('adds view settings only when they differ from the defaults', () => {
-    const state: Permalink = { ...DEFAULT_STATE, view: { axis: 'eas', unit: 'mps', system: 'si' } };
+    const state: Permalink = { ...DEFAULT_STATE, view: { axis: 'eas', unit: 'mps', system: 'si', tab: 'curves' } };
     expect(writePermalink(state)).toBe('ac=c172&x=eas&u=mps');
   });
 });
@@ -44,10 +44,17 @@ describe('readPermalink', () => {
   });
 
   it('reads view settings without disturbing the scenario', () => {
-    const { scenario, view, problems } = readPermalink('ac=sailplane&x=cas&u=kmh');
+    const { scenario, view, problems } = readPermalink('ac=sailplane&x=cas&u=kmh&tab=field');
     expect(problems).toEqual([]);
     expect(scenario.presetId).toBe('sailplane');
-    expect(view).toEqual({ axis: 'cas', unit: 'kmh', system: 'si' });
+    expect(view).toEqual({ axis: 'cas', unit: 'kmh', system: 'si', tab: 'field' });
+  });
+
+  it('opens on the tab the link names, and reports an unknown one', () => {
+    expect(readPermalink('tab=envelope').view.tab).toBe('envelope');
+    const { view, problems } = readPermalink('tab=cockpit');
+    expect(view.tab).toBe('curves');
+    expect(problems).toHaveLength(1);
   });
 
   it('reports unknown view settings and falls back to the defaults', () => {
@@ -76,7 +83,7 @@ describe('canonicalize', () => {
         tas: 61.5,
       },
       basePresetId: 'c172',
-      view: { axis: 'eas', unit: 'kt', system: 'us' },
+      view: { axis: 'eas', unit: 'kt', system: 'us', tab: 'envelope' },
     };
     expect(canonicalize(state)).toEqual(state);
   });

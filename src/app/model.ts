@@ -56,6 +56,9 @@ export type SpeedAxis = 'tas' | 'eas' | 'cas' | 'mach';
 export type SpeedUnit = 'kt' | 'mps' | 'kmh';
 /** Units for force, power, mass, area and length. Speed has its own setting. */
 export type UnitSystem = 'si' | 'us';
+/** Which part of the explorer is showing. */
+export type Tab = 'curves' | 'envelope' | 'field';
+export const TABS: readonly Tab[] = ['curves', 'envelope', 'field'];
 
 export interface ViewSettings {
   /** Which airspeed the x-axis shows */
@@ -64,9 +67,10 @@ export interface ViewSettings {
   readonly unit: SpeedUnit;
   /** SI (N, kW, kg, m²) or US customary (lbf, hp, lb, ft²) */
   readonly system: UnitSystem;
+  readonly tab: Tab;
 }
 
-export const DEFAULT_VIEW: ViewSettings = { axis: 'tas', unit: 'kt', system: 'si' };
+export const DEFAULT_VIEW: ViewSettings = { axis: 'tas', unit: 'kt', system: 'si', tab: 'curves' };
 
 /** Highest Mach number sampled. Beyond it the subsonic relations do not hold. */
 export const MACH_LIMIT = 0.9;
@@ -194,7 +198,7 @@ const FT_PER_M = 1 / 0.3048;
  * on the altitude or speed sliders, but they cost hundreds of optimisations
  * each, so they are computed once per aircraft (and weight, and ISA day).
  */
-function keyedCache<V>(limit: number) {
+export function keyedCache<V>(limit: number) {
   const entries = new Map<string, V>();
   return (key: string, make: () => V): V => {
     const hit = entries.get(key);
@@ -230,7 +234,7 @@ export function niceCeiling(value: number): number {
  * physical speed range whichever airspeed the axis shows.
  */
 export function chartWindow(aircraft: Aircraft, view: ViewSettings): ChartWindow {
-  return windowCache(JSON.stringify([aircraft, view]), () => fitWindow(aircraft, view));
+  return windowCache(JSON.stringify([aircraft, view.axis, view.unit, view.system]), () => fitWindow(aircraft, view));
 }
 
 function fitWindow(aircraft: Aircraft, view: ViewSettings): ChartWindow {
