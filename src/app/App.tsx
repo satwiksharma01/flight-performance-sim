@@ -174,6 +174,9 @@ export function App() {
           <button type="button" className="button" onClick={copyLink}>
             {copied ? 'Link copied' : 'Copy link'}
           </button>
+          <a className="button button--quiet" href="./validation.html">
+            Validation
+          </a>
           <a className="button button--quiet" href={REPO_URL} target="_blank" rel="noreferrer">
             Source
           </a>

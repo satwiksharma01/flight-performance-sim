@@ -22,6 +22,7 @@
   --accent-ink: #ffffff;
   --critical: #d03b3b;
   --warning: #b77900;
+  --good: #0a7d0a;
   --radius: 10px;
   --font: system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
@@ -45,6 +46,7 @@
     --accent: #3987e5;
     --critical: #e66767;
     --warning: #fab219;
+    --good: #0ca30c;
   }
 }
 
@@ -66,6 +68,7 @@
   --accent: #3987e5;
   --critical: #e66767;
   --warning: #fab219;
+  --good: #0ca30c;
 }
 
 *,
@@ -719,6 +722,151 @@ tr.is-dim th {
   max-width: 90ch;
   font-size: 12.5px;
   color: var(--ink-2);
+}
+
+/* --- Validation page ----------------------------------------------------- */
+
+.validation {
+  display: grid;
+  gap: 16px;
+}
+
+.validation .top {
+  margin-bottom: 4px;
+}
+
+.eyebrow {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.eyebrow a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.validation h2 {
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.legend-card {
+  padding: 14px 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.roles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 24px;
+  margin: 0;
+}
+
+.roles div {
+  display: grid;
+  gap: 4px;
+}
+
+.roles dd {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.role {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 550;
+  white-space: nowrap;
+  color: var(--ink-2);
+}
+
+.role--check {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.role--discrepancy {
+  border-style: dashed;
+}
+
+.status-chip {
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.status-chip span {
+  margin-right: 3px;
+}
+
+.status-chip--good span {
+  color: var(--good);
+}
+
+.status-chip--warning span {
+  color: var(--warning);
+}
+
+.status-chip--critical span {
+  color: var(--critical);
+}
+
+.validation-table th[scope='row'] {
+  font-weight: 400;
+  white-space: normal;
+  min-width: 220px;
+}
+
+.validation-table .quantity {
+  display: block;
+  font-weight: 600;
+}
+
+.validation-table .condition {
+  display: block;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.validation-table .case-note {
+  display: block;
+  max-width: 52ch;
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.validation-table tr.is-check th,
+.validation-table tr.is-check td {
+  background: var(--surface-2);
+}
+
+.validation-table .where {
+  font-size: 12px;
+}
+
+.limits {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 8px;
+  font-size: 13.5px;
+  color: var(--ink-2);
+  max-width: 90ch;
+}
+
+.limits strong {
+  color: var(--ink);
+}
+
+code {
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  font-size: 0.92em;
 }
 
 /* --- Narrow screens ------------------------------------------------------- */
