@@ -207,7 +207,8 @@ describe('stall speed', () => {
   });
 
   it('reproduces published Cessna 172S stall speeds within 2 kt', () => {
-    // Published: Vs1 53 KCAS clean, Vs0 48 KCAS full flap, both at 2450 lb.
+    // Published (POH): Vs1 53 KCAS clean, Vs0 48 KCAS full flap, both at the
+    // 2,550 lb max takeoff weight, most forward CG.
     // At sea level on a standard day CAS, EAS and TAS coincide, so a direct
     // comparison is valid here and nowhere else.
     const clean = mpsToKnots(mps(stallSpeed(CESSNA_172S, SEA_LEVEL.density)));

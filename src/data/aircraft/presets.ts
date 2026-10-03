@@ -3,10 +3,10 @@ import type { Aircraft } from '../../physics/aero.js';
 /**
  * Representative aircraft parameters for education and demonstration.
  *
- * These are *simplified representative* figures, not certification data. Mass
- * and wing area are published; CD0 and Oswald efficiency are estimates chosen
- * to reproduce published stall speeds, since neither is published by any
- * manufacturer.
+ * These are *simplified representative* figures, not certification data. Mass,
+ * wing area and span are published. CLmax is fitted to the published stall
+ * speeds at that mass. CD0 and Oswald efficiency are estimates, since no
+ * manufacturer publishes either.
  *
  * Where the simple parabolic polar cannot match reality, the discrepancy is
  * documented rather than tuned away — see `tests/aero.test.ts` and the planned
@@ -20,13 +20,13 @@ import type { Aircraft } from '../../physics/aero.js';
 
 export const CESSNA_172S: Aircraft = {
   name: 'Cessna 172S (representative)',
-  mass: 1111, // 2450 lb MTOW
-  wingArea: 16.17,
-  aspectRatio: 7.32,
+  mass: 1156.7, // 2,550 lb, the 172S's max takeoff weight (2,450 lb is the 172R's)
+  wingArea: 16.17, // 174 ft²
+  aspectRatio: 7.48, // 36 ft 1 in span over 174 ft²
   oswaldEfficiency: 0.75,
   cd0: 0.036,
-  clMax: 1.5,
-  clMaxFlaps: 1.8,
+  clMax: 1.54, // fitted: 53 KCAS clean stall at 2,550 lb
+  clMaxFlaps: 1.88, // fitted: 48 KCAS full-flap stall at 2,550 lb
 };
 
 export const GENERIC_JET_TRAINER: Aircraft = {
