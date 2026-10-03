@@ -181,12 +181,16 @@ export function characteristicSpeeds(
   loadFactor = 1,
 ): CurveMarker[] {
   const density = atmosphere.density;
+  // In a turn or pull-up the wing carries nW, and every optimum moves to the
+  // speed it would have at that weight: up by sqrt(n). Evaluating the closed
+  // forms at 1 g would leave the markers off the minima of the curves drawn.
+  const loaded = loadFactor === 1 ? aircraft : { ...aircraft, mass: aircraft.mass * loadFactor };
 
   return [
     buildMarker('stall', stallSpeed(aircraft, density, loadFactor), aircraft, atmosphere, loadFactor),
-    buildMarker('min-power', vMinPower(aircraft, density), aircraft, atmosphere, loadFactor),
-    buildMarker('min-drag', vMinDrag(aircraft, density), aircraft, atmosphere, loadFactor),
-    buildMarker('jet-range', vJetRange(aircraft, density), aircraft, atmosphere, loadFactor),
+    buildMarker('min-power', vMinPower(loaded, density), aircraft, atmosphere, loadFactor),
+    buildMarker('min-drag', vMinDrag(loaded, density), aircraft, atmosphere, loadFactor),
+    buildMarker('jet-range', vJetRange(loaded, density), aircraft, atmosphere, loadFactor),
   ];
 }
 

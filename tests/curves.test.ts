@@ -228,4 +228,27 @@ describe('altitude and load factor', () => {
     expect(pulling.stallSpeed).toBeCloseTo(2 * level.stallSpeed, 6);
     expect(pulling.loadFactor).toBe(4);
   });
+  it('moves every characteristic speed up by sqrt(n) under load', () => {
+    // Before 2026-10-03 the optima stayed at their 1 g speeds whatever n was.
+    const level = characteristicSpeeds(CESSNA_172S, SEA_LEVEL);
+    const turning = characteristicSpeeds(CESSNA_172S, SEA_LEVEL, 2);
+    level.forEach((m, i) => {
+      expect(turning[i]!.tas).toBeCloseTo(Math.SQRT2 * m.tas, 9);
+    });
+  });
+
+  it('puts the loaded V_md on the minimum of the loaded drag curve', () => {
+    const n = 2;
+    const marker = characteristicSpeeds(CESSNA_172S, SEA_LEVEL, n).find((m) => m.kind === 'min-drag')!;
+    let best = 0;
+    let bestDrag = Infinity;
+    for (let v = 20; v <= 120; v += 0.001) {
+      const d = evaluatePoint(CESSNA_172S, SEA_LEVEL, v, n).drag;
+      if (d < bestDrag) {
+        bestDrag = d;
+        best = v;
+      }
+    }
+    expect(marker.tas).toBeCloseTo(best, 2);
+  });
 });

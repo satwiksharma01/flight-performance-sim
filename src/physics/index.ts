@@ -12,3 +12,4 @@ export * from './atmosphere.js';
 export * from './airspeed.js';
 export * from './aero.js';
 export * from './performance/curves.js';
+export * from './performance/turn.js';
