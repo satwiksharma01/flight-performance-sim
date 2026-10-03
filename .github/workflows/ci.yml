@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  check:
+    name: Typecheck, test, build, cross-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+      # The independent implementation: re-derives the core in Python and
+      # fails the build if any quantity disagrees beyond its tolerance.
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - run: pip install scipy
+      - name: Cross-check against validation/reference.py
+        run: npm run validate
