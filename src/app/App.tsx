@@ -266,8 +266,8 @@ export function App() {
         <div>
           <h1>Flight Performance Simulator</h1>
           <p className="tagline">
-            Drag, power, climb and glide, from a physics core tested against an independent implementation and published
-            data. Every scenario is a link.
+            Drag, power, climb and glide; the flight envelope and turns; takeoff and landing. From a physics core tested
+            against an independent implementation and published data. Every scenario is a link.
           </p>
         </div>
         <div className="top-actions">
@@ -565,7 +565,7 @@ export function App() {
       <footer className="footer">
         <p>
           <strong>Model.</strong> Parabolic drag polar, C<sub>D</sub> = C<sub>D0</sub> + kC<sub>L</sub>², in steady
-          level flight at n = 1. Layered ISA atmosphere, entered as pressure altitude and ISA deviation or OAT, the way POH
+          flight at the chosen load factor. Layered ISA atmosphere, entered as pressure altitude and ISA deviation or OAT, the way POH
           charts and flight-test cards state a condition. No compressibility: shaded from
           Mach 0.7, not drawn past Mach 0.9. The chart axes are fitted once per aircraft at sea level, so the sliders
           move the curves rather than the axes.
@@ -573,7 +573,8 @@ export function App() {
         <p>
           Aircraft figures are simplified and representative, for education, not certification data. References: ISO
           2533 / US Standard Atmosphere 1976; Anderson, <em>Aircraft Performance and Design</em>; Hull,{' '}
-          <em>Fundamentals of Airplane Flight Mechanics</em>.
+          <em>Fundamentals of Airplane Flight Mechanics</em>; Raymer, <em>Aircraft Design</em>; Gudmundsson,{' '}
+          <em>General Aviation Aircraft Design</em>; 14 CFR Part 23.
         </p>
       </footer>
     </div>

@@ -353,11 +353,17 @@ curve move. A complete product at a tiny scope.
       `npm run validate`*
 
 ### v0.5 — Envelope and maneuver *(the "wow" release)*
-- [ ] V-n diagram
-- [~] Turn performance — *bank angle, load factor, radius and rate at the selected
-      speed (`performance/turn.ts`); no turn-rate chart or doghouse plot yet*
-- [ ] Ps contours + flight envelope boundary (Web Worker)
-- [ ] Takeoff / landing ground roll + density altitude effects
+- [x] V-n diagram — *manoeuvre envelope, 14 CFR 23.341 gust lines, design envelope;
+      172S limits from its POH, `V_A` checked at three weights*
+- [x] Turn performance — *instantaneous and sustained turn rate (the doghouse),
+      corner speed, constant-radius lines*
+- [x] Ps contours + flight envelope boundary — *96 × 72 grid in about 4 ms, cached,
+      so no Web Worker; best-climb schedule and energy-height lines*
+- [x] Takeoff / landing ground roll + density altitude effects — *Raymer's method,
+      ground runs integrated exactly, seven runway surfaces, wind; checked cell by
+      cell against the 172S POH tables, misses pinned with their causes*
+- [x] *Found on the way:* the piston lapse overstated hot-day power loss twofold;
+      corrected to the engine makers' √(T_std/T)
 
 ### v0.6 — Cruise and comparison
 - [ ] Breguet range/endurance, all four cases

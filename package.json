@@ -1,6 +1,6 @@
 {
   "name": "flight-performance-simulator",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "description": "Aircraft performance analysis in the browser, with a cross-validated physics core",
