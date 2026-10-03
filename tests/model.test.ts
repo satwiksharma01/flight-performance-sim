@@ -250,7 +250,8 @@ describe('climb and glide in the chart model', () => {
 
   it('ends the climb profile at the absolute ceiling', () => {
     const { altitudesFt, rocFpm } = c172.climb!.profile;
-    const last = rocFpm.findLastIndex((v) => v !== null);
+    let last = rocFpm.length - 1;
+    while (last > 0 && rocFpm[last] === null) last--;
     expect(rocFpm[last]).toBe(0);
     expect(altitudesFt[last]).toBeCloseTo(c172.climb!.absoluteCeilingFt!, 6);
   });
