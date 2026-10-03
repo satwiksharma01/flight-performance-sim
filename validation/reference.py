@@ -9,6 +9,9 @@ TypeScript, so a shared mistake is unlikely:
 - CAS found by root-solving the pitot relation, with the Rayleigh supersonic
   pitot formula above Mach 1
 - characteristic speeds found by numerical minimisation, not closed forms
+- the exact steady climb as a root of its force balance (the TS iterates a
+  fixed point), V_y and V_x by Brent's bounded minimiser (the TS uses golden
+  section), ceilings by brentq, and glides directly from their definitions
 
 Run with `npm run validate`, which exports the TypeScript outputs first.
 Exits non-zero if any quantity disagrees beyond its tolerance.
@@ -123,6 +126,104 @@ def aero(ac, rho):
     )
 
 
+# --- Propulsion, climb and glide -------------------------------------------
+
+def isa_hp(hp, d_isa=0.0):
+    """State at a pressure altitude: standard pressure, offset temperature."""
+    Ts, p = standard(hp)
+    T = Ts + d_isa
+    return dict(T=T, p=p, rho=p / (R * T), sigma=p / (R * T) / RHO0)
+
+
+def lapse(engine, hp, sigma):
+    gf = lambda s: max(0.0, 1.132 * s - 0.132)
+    if engine["kind"] == "piston":
+        hc = engine.get("criticalAltitude")
+        if hc is None:
+            return gf(sigma)
+        if hp <= hc:
+            return 1.0
+        Tc, pc = standard(hc)
+        return gf(sigma / (pc / (R * Tc) / RHO0))
+    return sigma ** engine["lapseExponent"]
+
+
+def thrust(engine, v, lap):
+    if engine["kind"] == "turbofan":
+        return engine["thrust"] * lap
+    prop = engine["propeller"]
+    line = prop["staticThrust"] * (1 - v / prop["zeroThrustSpeed"])
+    return max(0.0, min(line, engine["power"] / v)) * lap
+
+
+def polar(ac):
+    k = 1 / (math.pi * ac["oswaldEfficiency"] * ac["aspectRatio"])
+    return ac["cd0"], k
+
+
+def drag_for_lift(ac, v, rho, lift):
+    cd0, k = polar(ac)
+    q = 0.5 * rho * v * v
+    cl = lift / (q * ac["wingArea"])
+    return q * ac["wingArea"] * (cd0 + k * cl * cl)
+
+
+def climb_exact(ac, v, rho, lap):
+    """Root of T - D(W cos g) - W sin g = 0 on (-pi/2, pi/2)."""
+    W = ac["mass"] * G0
+    T = thrust(ac["propulsion"], v, lap)
+    f = lambda g: T - drag_for_lift(ac, v, rho, W * math.cos(g)) - W * math.sin(g)
+    hi = math.pi / 2 - 1e-12
+    if f(hi) > 0:
+        return hi    # thrust beats weight plus drag: vertical
+    if f(-hi) < 0:
+        return -hi   # drag beats thrust plus weight: no steady path, even straight down
+    return brentq(f, -hi, hi, xtol=1e-15)
+
+
+def climb_speeds(ac, hp, d):
+    st = isa_hp(hp, d)
+    rho, lap = st["rho"], lapse(ac["propulsion"], hp, st["sigma"])
+    W = ac["mass"] * G0
+    cd0, k = polar(ac)
+    vs = math.sqrt(2 * W / (rho * ac["wingArea"] * ac["clMax"]))
+    vmd = math.sqrt(2 * W / (rho * ac["wingArea"])) * (k / cd0) ** 0.25
+    top = 8 * max(vmd, vs)
+    opt = dict(bounds=(vs, top), method="bounded", options=dict(xatol=1e-11 * top))
+    roc = lambda v: v * math.sin(climb_exact(ac, v, rho, lap))
+    vy = minimize_scalar(lambda v: -roc(v), **opt).x
+    vx = minimize_scalar(lambda v: -climb_exact(ac, v, rho, lap), **opt).x
+    excess = lambda v: thrust(ac["propulsion"], v, lap) - drag_for_lift(ac, v, rho, W)
+    vme = minimize_scalar(lambda v: -excess(v), **opt).x
+    vmax = None if excess(vme) < 0 else brentq(excess, vme, top, xtol=1e-12)
+    return dict(vy=vy, roc=roc(vy), vx=vx, gamma=climb_exact(ac, vx, rho, lap), vmax=vmax, lapse=lap, rho=rho)
+
+
+def ceiling(ac, d, rate):
+    f = lambda h: climb_speeds(ac, h, d)["roc"] - rate
+    if f(-1000) <= 0 or f(30000) > 0:
+        return None
+    return brentq(f, -1000, 30000, xtol=1e-6)
+
+
+def glide_at(ac, rho, cl):
+    cd0, k = polar(ac)
+    cd = cd0 + k * cl * cl
+    g = math.atan(cd / cl)
+    v = math.sqrt(2 * ac["mass"] * G0 * math.cos(g) / (rho * ac["wingArea"] * cl))
+    return dict(cl=cl, tas=v, gamma=g, ratio=cl / cd, sink=v * math.sin(g))
+
+
+def glides(ac, rho):
+    cd0, k = polar(ac)
+    best = glide_at(ac, rho, min(math.sqrt(cd0 / k), ac["clMax"]))
+    b = dict(bounds=(1e-3, ac["clMax"]), method="bounded", options=dict(xatol=1e-12))
+    sink = glide_at(ac, rho, minimize_scalar(lambda c: glide_at(ac, rho, c)["sink"], **b).x)
+    ground = lambda c: (glide_at(ac, rho, c)["tas"] * math.cos(glide_at(ac, rho, c)["gamma"]) - 10) / glide_at(ac, rho, c)["sink"]
+    wind = glide_at(ac, rho, minimize_scalar(lambda c: -ground(c), **b).x)
+    return best, sink, wind
+
+
 # Relative tolerances, except altitudes (absolute, metres). Each is set by the
 # reference's own precision, not by what the TS happens to achieve.
 TOLERANCE = {
@@ -133,6 +234,13 @@ TOLERANCE = {
     "CAS, M>=1": 1e-8,    # Rayleigh pitot branch, same precision
     "vs": 1e-12, "ldmax": 1e-8, "d60": 1e-12,
     "vmd": 1e-7, "vmp": 1e-7, "vjr": 1e-7,  # bounded-minimiser precision
+    "engine lapse": 1e-12, "thrust": 1e-12,
+    "climb angle": 1e-9,          # TS fixed point vs brentq root
+    "V_y": 1e-5, "V_x": 1e-5,     # flat optima: speed is the hard part
+    "ROC at V_y": 1e-9, "V_max": 1e-8,
+    "ceilings [m]": 0.05,         # both bisect to a centimetre or better
+    "best glide": 1e-12, "min-sink speed": 1e-5, "glide into wind": 1e-5,
+    "min sink": 1e-8,     # where the optimum is the CLmax bound, the slope there lets solver precision show
 }
 
 
@@ -164,6 +272,39 @@ def main(path):
         ref = aero(row["ac"], row["rho"])
         for key in ("vs", "vmd", "vmp", "vjr", "ldmax", "d60"):
             track(key, row[key], ref[key], f"{row['id']} at {row['h']} m")
+
+    for row in ts["performance"]:
+        ac, rho, where = row["ac"], row["rho"], f"{row['id']} at Hp {row['hp']} m, dISA {row['d']}"
+        best, sink, wind = glides(ac, rho)
+        track("best glide", row["glide"]["best"]["glideRatio"], best["ratio"], where)
+        track("best glide", row["glide"]["best"]["tas"], best["tas"], where)
+        track("min-sink speed", row["glide"]["sink"]["tas"], sink["tas"], where)
+        track("min sink", row["glide"]["sink"]["sinkRate"], sink["sink"], where)
+        if row["glide"]["headwind"] is not None:
+            track("glide into wind", row["glide"]["headwind"]["tas"], wind["tas"], where)
+        if row["climb"] is None:
+            continue
+        ref = climb_speeds(ac, row["hp"], row["d"])
+        c = row["climb"]
+        track("engine lapse", c["lapse"], ref["lapse"], where)
+        for t in c["thrustAt"]:
+            track("thrust", t["t"], thrust(ac["propulsion"], t["v"], ref["lapse"]), f"{where}, V {t['v']}")
+        for point in c["at"]:
+            g = climb_exact(ac, point["tas"], rho, ref["lapse"])
+            err = abs(point["gamma"] - g)  # absolute: angles pass through zero
+            if err > worst["climb angle"][0]:
+                worst["climb angle"] = (err, f"{where}, V {point['tas']}")
+        track("V_y", c["vy"]["tas"], ref["vy"], where)
+        track("ROC at V_y", c["vy"]["rateOfClimb"], ref["roc"], where)
+        track("V_x", c["vx"]["tas"], ref["vx"], where)
+        if ref["vmax"] is not None and c["maxLevelSpeed"] is not None:
+            track("V_max", c["maxLevelSpeed"], ref["vmax"], where)
+
+    for row in ts["ceilings"]:
+        for key, rate in (("absolute", 0.0), ("service", 100 * 0.3048 / 60)):
+            ref = ceiling(row["ac"], row["d"], rate)
+            if ref is not None and row[key] is not None:
+                track("ceilings [m]", row[key], ref, f"{row['id']} {key}, dISA {row['d']}", absolute=True)
 
     failed = False
     print("TypeScript core vs independent reference: worst disagreement")
