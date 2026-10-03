@@ -15,6 +15,7 @@ import {
   fromUnit,
   niceCeiling,
   tasToAxis,
+  toMass,
   toUnit,
   type SpeedAxis,
   type ViewSettings,
@@ -26,8 +27,8 @@ function scenario(overrides: Partial<Scenario>): Scenario {
   return { ...DEFAULT_SCENARIO, ...overrides };
 }
 
-function view(axis: SpeedAxis, unit: ViewSettings['unit'] = 'kt'): ViewSettings {
-  return { axis, unit };
+function view(axis: SpeedAxis, unit: ViewSettings['unit'] = 'kt', system: ViewSettings['system'] = 'si'): ViewSettings {
+  return { axis, unit, system };
 }
 
 function marker(model: ReturnType<typeof buildChartModel>, kind: string) {
@@ -212,5 +213,24 @@ describe('weight and bank', () => {
   it('has no flap stall for an aircraft without flaps', () => {
     const glider = scenario({ presetId: 'sailplane', aircraft: GENERIC_SAILPLANE });
     expect(buildChartModel(glider, view('tas')).flapStall).toBeNull();
+  });
+});
+
+describe('unit system', () => {
+  it('converts drag to lbf and power to hp exactly', () => {
+    const si = buildChartModel(scenario({}), view('tas', 'kt', 'si'));
+    const us = buildChartModel(scenario({}), view('tas', 'kt', 'us'));
+    si.drag.forEach((d, i) => expect(us.drag[i]!).toBeCloseTo(d / 4.4482216152605, 9));
+    si.power.forEach((kw, i) => expect(us.power[i]!).toBeCloseTo(kw / 0.745699872, 9));
+  });
+
+  it('puts the chart tops on clean values in the chosen unit', () => {
+    const us = buildChartModel(scenario({}), view('tas', 'kt', 'us')).window;
+    expect(niceCeiling(us.dragMax)).toBe(us.dragMax);
+    expect(niceCeiling(us.powerMax)).toBe(us.powerMax);
+  });
+
+  it('shows the 172S at exactly 2,550 lb', () => {
+    expect(toMass(CESSNA_172S.mass, 'us')).toBeCloseTo(2550, 9);
   });
 });

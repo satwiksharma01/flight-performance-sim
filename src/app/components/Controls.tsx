@@ -1,8 +1,19 @@
 import { useEffect, useId, useState, type ReactNode } from 'react';
 import { AIRCRAFT_LIMITS, G0, bankForLoadFactor, type Aircraft } from '../../physics/index.js';
 import { PRESETS, PRESET_IDS, type PresetId } from '../../data/aircraft/presets.js';
-import type { ChartModel, SpeedAxis, SpeedUnit, ViewSettings } from '../model.js';
-import { AXIS_NAME, UNIT_NAME, axisSpeed, feet, num, signed } from '../format.js';
+import {
+  SYSTEM_UNITS,
+  fromArea,
+  fromMass,
+  toArea,
+  toMass,
+  type ChartModel,
+  type SpeedAxis,
+  type SpeedUnit,
+  type UnitSystem,
+  type ViewSettings,
+} from '../model.js';
+import { AXIS_NAME, UNIT_NAME, axisSpeed, feet, mass, num, signed } from '../format.js';
 
 const FT_PER_M = 1 / 0.3048;
 
@@ -11,15 +22,16 @@ const FT_PER_M = 1 / 0.3048;
 interface FieldSpec {
   readonly key: Exclude<keyof Aircraft, 'name'>;
   readonly label: string;
-  readonly unit?: string;
+  /** Converted by the unit system; plain coefficients have none */
+  readonly quantity?: 'mass' | 'area';
   readonly hint: string;
   /** May be left blank: the aircraft simply doesn't have it */
   readonly optional?: boolean;
 }
 
 const FIELDS: readonly FieldSpec[] = [
-  { key: 'mass', label: 'Max takeoff mass', unit: 'kg', hint: 'The weight slider flies anything up to this.' },
-  { key: 'wingArea', label: 'Wing area', unit: 'm²', hint: 'Reference area S.' },
+  { key: 'mass', label: 'Max takeoff mass', quantity: 'mass', hint: 'The weight slider flies anything up to this.' },
+  { key: 'wingArea', label: 'Wing area', quantity: 'area', hint: 'Reference area S.' },
   { key: 'aspectRatio', label: 'Aspect ratio', hint: 'b²/S. Higher means less induced drag.' },
   { key: 'oswaldEfficiency', label: 'Oswald efficiency', hint: 'Span efficiency e.' },
   { key: 'cd0', label: 'CD₀', hint: 'Zero-lift drag coefficient.' },
@@ -32,48 +44,73 @@ const FIELDS: readonly FieldSpec[] = [
   },
 ];
 
-/** The same ranges a permalink is held to, so the editor can't make a link that won't load. */
-function validate(spec: FieldSpec, raw: string): { value: number | null } | { error: string } {
+/** SI value to what the field shows, and back. */
+function toDisplay(spec: FieldSpec, si: number, system: UnitSystem): number {
+  if (spec.quantity === 'mass') return toMass(si, system);
+  if (spec.quantity === 'area') return toArea(si, system);
+  return si;
+}
+function fromDisplay(spec: FieldSpec, shown: number, system: UnitSystem): number {
+  if (spec.quantity === 'mass') return fromMass(shown, system);
+  if (spec.quantity === 'area') return fromArea(shown, system);
+  return shown;
+}
+
+/** Seven significant figures: 2550 lb shows as 2550, not 2550.0000000001. */
+function show(value: number): string {
+  return String(Number(value.toPrecision(7)));
+}
+
+/**
+ * The same ranges a permalink is held to, so the editor can't make a link that
+ * won't load. Checked in the displayed unit, then converted back to SI.
+ */
+function validate(spec: FieldSpec, raw: string, system: UnitSystem): { value: number | null } | { error: string } {
   if (raw.trim() === '') return spec.optional ? { value: null } : { error: 'Enter a number.' };
   const value = Number(raw);
   if (!Number.isFinite(value)) return { error: 'Enter a number.' };
-  const { min, max } = AIRCRAFT_LIMITS[spec.key];
-  if (value < min || value > max) {
-    const show = (v: number) => v.toLocaleString('en-US', { maximumFractionDigits: 6 });
-    return { error: `Between ${show(min)} and ${show(max)}.` };
+  const limits = AIRCRAFT_LIMITS[spec.key];
+  const min = toDisplay(spec, limits.min, system);
+  const max = toDisplay(spec, limits.max, system);
+  if (value < min * (1 - 1e-9) || value > max * (1 + 1e-9)) {
+    const fmt = (v: number) => Number(v.toPrecision(4)).toLocaleString('en-US', { maximumFractionDigits: 6 });
+    return { error: `Between ${fmt(min)} and ${fmt(max)}.` };
   }
-  return { value };
+  return { value: fromDisplay(spec, value, system) };
 }
 
 function NumberField({
   spec,
   value,
+  system,
   onCommit,
 }: {
   spec: FieldSpec;
   value: number | undefined;
+  system: UnitSystem;
   onCommit: (value: number | null) => void;
 }) {
   const id = useId();
-  const [draft, setDraft] = useState(value === undefined ? '' : String(value));
+  const shown = value === undefined ? '' : show(toDisplay(spec, value, system));
+  const [draft, setDraft] = useState(shown);
   const [error, setError] = useState<string | null>(null);
 
   // Follow outside changes (a preset switch, a reset) unless the draft already
   // means the same number — otherwise typing "0.0" would be rewritten to "0".
   useEffect(() => {
-    const same = value === undefined ? draft.trim() === '' : Number(draft) === value;
+    const same = value === undefined ? draft.trim() === '' : draft.trim() !== '' && show(Number(draft)) === shown;
     if (!same) {
-      setDraft(value === undefined ? '' : String(value));
+      setDraft(shown);
       setError(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value]);
+  }, [shown]);
 
   return (
     <div className="field">
       <label htmlFor={id} title={spec.hint}>
         {spec.label}
-        {spec.unit && <span className="unit"> {spec.unit}</span>}
+        {spec.quantity && <span className="unit"> {SYSTEM_UNITS[system][spec.quantity]}</span>}
       </label>
       <input
         id={id}
@@ -87,7 +124,7 @@ function NumberField({
         aria-describedby={error ? `${id}-error` : undefined}
         onChange={(e) => {
           setDraft(e.target.value);
-          const result = validate(spec, e.target.value);
+          const result = validate(spec, e.target.value, system);
           if ('error' in result) {
             setError(result.error);
           } else {
@@ -111,10 +148,12 @@ export function AircraftPanel({
   basePresetId,
   onPreset,
   onEdit,
+  system,
 }: {
   aircraft: Aircraft;
   presetId: string | null;
   basePresetId: string | null;
+  system: UnitSystem;
   onPreset: (id: PresetId) => void;
   onEdit: (key: FieldSpec['key'], value: number | null) => void;
 }) {
@@ -156,6 +195,7 @@ export function AircraftPanel({
             <NumberField
               key={spec.key}
               spec={spec}
+              system={system}
               value={aircraft[spec.key]}
               onCommit={(v) => onEdit(spec.key, v)}
             />
@@ -349,7 +389,7 @@ export function ConditionPanel({
         step={maxMass / 600}
         readout={
           <>
-            {num(model.weight / G0)} kg{' '}
+            {mass(model.weight / G0, view.system)}{' '}
             <span className="dim">{num((100 * model.weight) / G0 / maxMass)} % MTOW</span>
           </>
         }
@@ -433,6 +473,8 @@ function Segmented<T extends string>({
 
 const AXES: readonly SpeedAxis[] = ['tas', 'eas', 'cas', 'mach'];
 const UNITS: readonly SpeedUnit[] = ['kt', 'mps', 'kmh'];
+const SYSTEMS: readonly UnitSystem[] = ['si', 'us'];
+const SYSTEM_NAME: Record<UnitSystem, string> = { si: 'SI: N, kW, kg', us: 'US: lbf, hp, lb' };
 
 const HINTS: Record<SpeedAxis, string> = {
   tas:
@@ -458,12 +500,19 @@ export function ViewPanel({ view, onChange }: { view: ViewSettings; onChange: (v
         onChange={(axis) => onChange({ ...view, axis })}
       />
       <Segmented
-        label="Unit"
+        label="Speed unit"
         options={UNITS}
         value={view.unit}
         names={UNIT_NAME}
         disabled={view.axis === 'mach'}
         onChange={(unit) => onChange({ ...view, unit })}
+      />
+      <Segmented
+        label="Force, power, weight"
+        options={SYSTEMS}
+        value={view.system}
+        names={SYSTEM_NAME}
+        onChange={(system) => onChange({ ...view, system })}
       />
       <p className="hint">{HINTS[view.axis]}</p>
     </section>

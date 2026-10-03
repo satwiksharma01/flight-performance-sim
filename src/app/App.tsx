@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { atPressureAltitude, loadFactorForBank, vMinDrag, type Aircraft } from '../physics/index.js';
 import { PRESETS, type PresetId } from '../data/aircraft/presets.js';
-import { axisToTas, buildChartModel, type ChartModel, type ViewSettings } from './model.js';
+import { SYSTEM_UNITS, axisToTas, buildChartModel, type ChartModel, type ViewSettings } from './model.js';
 import { canonicalize, readPermalink, writePermalink, type Permalink } from './permalink.js';
 import { axisLabel, axisTick, tick } from './format.js';
 import { Chart, type ChartBand, type ChartMarker } from './components/Chart.js';
@@ -175,6 +175,7 @@ export function App() {
             basePresetId={state.basePresetId}
             onPreset={selectPreset}
             onEdit={editAircraft}
+            system={view.system}
           />
           {model && (
             <ConditionPanel
@@ -227,7 +228,7 @@ export function App() {
                   xMax={model.window.xMax}
                   yMax={model.window.dragMax}
                   xLabel={axisLabel(view)}
-                  yLabel="Drag (N)"
+                  yLabel={`Drag (${SYSTEM_UNITS[view.system].force})`}
                   formatX={(v) => axisTick(v, view)}
                   formatY={tick}
                   markers={markersFor(model)}
@@ -251,7 +252,7 @@ export function App() {
                   xMax={model.window.xMax}
                   yMax={model.window.powerMax}
                   xLabel={axisLabel(view)}
-                  yLabel="Power (kW)"
+                  yLabel={`Power (${SYSTEM_UNITS[view.system].power})`}
                   formatX={(v) => axisTick(v, view)}
                   formatY={tick}
                   markers={markersFor(model)}
@@ -287,7 +288,7 @@ export function App() {
               <div className="tables">
                 <SpeedsTable model={model} view={view} />
                 <SelectedPanel model={model} view={view} />
-                <AtmospherePanel model={model} />
+                <AtmospherePanel model={model} view={view} />
               </div>
             </>
           )}

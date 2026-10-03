@@ -1,6 +1,9 @@
 import { G0, turnRadius, turnRate, type AirspeedSet } from '../../physics/index.js';
-import { toUnit, type ChartModel, type MarkerView, type ViewSettings } from '../model.js';
-import { UNIT_NAME, axisSpeed, feet, horsepower, mach, num, signed, speed } from '../format.js';
+import { toForce, toUnit, type ChartModel, type MarkerView, type ViewSettings } from '../model.js';
+import { UNIT_NAME, axisSpeed, feet, force, length, mach, mass, num, otherPower, power, signed, speed } from '../format.js';
+
+/** kg/m³ to slug/ft³: (1/14.5939029 slug per kg) × 0.3048³ m³ per ft³ */
+const SLUG_FT3_PER_KG_M3 = (0.3048 * 0.3048 * 0.3048) / 14.5939029372;
 
 const USE: Record<MarkerView['kind'], string> = {
   stall: 'Slowest level flight',
@@ -111,8 +114,8 @@ export function SpeedsTable({ model, view }: { model: ChartModel; view: ViewSett
                 <td className="n">{num(toUnit(m.speeds.eas, unit), unit === 'mps' ? 1 : 0)}</td>
                 <td className="n">{num(toUnit(m.speeds.cas, unit), unit === 'mps' ? 1 : 0)}</td>
                 <td className="n">{num(m.speeds.mach, 3)}</td>
-                <td className="n">{num(m.point.drag)} N</td>
-                <td className="n">{num(m.point.powerRequired / 1000, 1)} kW</td>
+                <td className="n">{force(m.point.drag, view.system)}</td>
+                <td className="n">{power(m.point.powerRequired / 1000, view.system)}</td>
                 <td className="n">{num(m.point.liftToDrag, 1)}</td>
               </tr>
             ))}
@@ -137,7 +140,7 @@ export function SpeedsTable({ model, view }: { model: ChartModel; view: ViewSett
         </table>
       </div>
       <p className="card-foot">
-        Speeds in {UNIT_NAME[unit]}, at {num(model.weight / G0)} kg
+        Speeds in {UNIT_NAME[unit]}, at {mass(model.weight / G0, view.system)}
         {model.loadFactor === 1 ? '' : ` and ${num(model.loadFactor, 2)} g`}. The charts show the clean configuration.
       </p>
     </section>
@@ -180,24 +183,25 @@ export function SelectedPanel({ model, view }: { model: ChartModel; view: ViewSe
         <dt>Drag coefficient</dt>
         <dd>{num(point.cd, 4)}</dd>
         <dt>Total drag</dt>
-        <dd>{num(point.drag)} N</dd>
+        <dd>{force(point.drag, view.system)}</dd>
         <dt>Parasite / induced</dt>
         <dd>
-          {num(point.parasiteDrag)} / {num(point.inducedDrag)} N
+          {num(toForce(point.parasiteDrag, view.system))} / {force(point.inducedDrag, view.system)}
         </dd>
         <dt>Power required</dt>
         <dd>
-          {num(point.powerRequired / 1000, 1)} kW <span className="dim">{horsepower(point.powerRequired / 1000)}</span>
+          {power(point.powerRequired / 1000, view.system)}{' '}
+          <span className="dim">{otherPower(point.powerRequired / 1000, view.system)}</span>
         </dd>
         <dt>L/D</dt>
         <dd>{num(point.liftToDrag, 2)}</dd>
         <dt title="Weight over pressure ratio. Jet performance collapses onto W/δ and Mach.">W/δ</dt>
-        <dd>{num(model.weight / model.atmosphere.pressureRatio)} N</dd>
+        <dd>{force(model.weight / model.atmosphere.pressureRatio, view.system)}</dd>
         {model.loadFactor > 1 && (
           <>
             <dt>Turn radius</dt>
             <dd>
-              {num(turnRadius(s.tas, model.loadFactor))} m{' '}
+              {length(turnRadius(s.tas, model.loadFactor), view.system)}{' '}
               <span className="dim">{num(turnRadius(s.tas, model.loadFactor) / 1852, 2)} NM</span>
             </dd>
             <dt>Turn rate</dt>
@@ -214,7 +218,7 @@ export function SelectedPanel({ model, view }: { model: ChartModel; view: ViewSe
 
 // --- Atmosphere -------------------------------------------------------------
 
-export function AtmospherePanel({ model }: { model: ChartModel }) {
+export function AtmospherePanel({ model, view }: { model: ChartModel; view: ViewSettings }) {
   const a = model.atmosphere;
   return (
     <section className="card table-card" aria-labelledby="atmosphere-h">
@@ -241,7 +245,8 @@ export function AtmospherePanel({ model }: { model: ChartModel }) {
         </dd>
         <dt>Density</dt>
         <dd>
-          {num(a.density, 4)} kg/m³ <span className="dim">σ {num(a.densityRatio, 3)}</span>
+          {view.system === 'us' ? `${num(a.density * SLUG_FT3_PER_KG_M3, 6)} slug/ft³` : `${num(a.density, 4)} kg/m³`}{' '}
+          <span className="dim">σ {num(a.densityRatio, 3)}</span>
         </dd>
         <dt>Speed of sound</dt>
         <dd>{speed(a.speedOfSound, 'kt')}</dd>

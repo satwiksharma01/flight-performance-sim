@@ -56,7 +56,7 @@ function allFinite(values: readonly number[]): boolean {
 }
 
 function check(scenario: Scenario, axis: SpeedAxis, unit: SpeedUnit) {
-  const model = buildChartModel(scenario, { axis, unit });
+  const model = buildChartModel(scenario, { axis, unit, system: unit === 'kt' ? 'us' : 'si' });
   const w = model.window;
 
   expect(allFinite([w.xMax, w.dragMax, w.powerMax, w.liftToDragMax])).toBe(true);
@@ -111,6 +111,7 @@ describe('hostile links', () => {
       try {
         const link = readPermalink(query);
         check(link.scenario, link.view.axis, link.view.unit);
+        buildChartModel(link.scenario, link.view);
       } catch (error) {
         throw new Error(`query "${query}" failed: ${String(error)}`);
       }

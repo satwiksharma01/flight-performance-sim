@@ -43,15 +43,19 @@ import { loadFactorOf, operatingMass, type Scenario } from '../state/url.js';
 
 export type SpeedAxis = 'tas' | 'eas' | 'cas' | 'mach';
 export type SpeedUnit = 'kt' | 'mps' | 'kmh';
+/** Units for force, power, mass, area and length. Speed has its own setting. */
+export type UnitSystem = 'si' | 'us';
 
 export interface ViewSettings {
   /** Which airspeed the x-axis shows */
   readonly axis: SpeedAxis;
   /** Unit for every speed except Mach */
   readonly unit: SpeedUnit;
+  /** SI (N, kW, kg, m²) or US customary (lbf, hp, lb, ft²) */
+  readonly system: UnitSystem;
 }
 
-export const DEFAULT_VIEW: ViewSettings = { axis: 'tas', unit: 'kt' };
+export const DEFAULT_VIEW: ViewSettings = { axis: 'tas', unit: 'kt', system: 'si' };
 
 /** Highest Mach number sampled. Beyond it the subsonic relations do not hold. */
 export const MACH_LIMIT = 0.9;
@@ -76,6 +80,49 @@ export function toUnit(speed: number, unit: SpeedUnit): number {
 /** Convert a speed in a display unit to m/s. */
 export function fromUnit(speed: number, unit: SpeedUnit): number {
   return speed * MPS_PER_UNIT[unit];
+}
+
+/** Symbols for each unit system. */
+export const SYSTEM_UNITS: Record<UnitSystem, Record<'force' | 'power' | 'mass' | 'area' | 'length', string>> = {
+  si: { force: 'N', power: 'kW', mass: 'kg', area: 'm²', length: 'm' },
+  us: { force: 'lbf', power: 'hp', mass: 'lb', area: 'ft²', length: 'ft' },
+};
+
+// Exact definitions: the international pound and foot, and mechanical horsepower.
+const KG_PER_LB = 0.45359237;
+const M_PER_FT = 0.3048;
+const N_PER_LBF = KG_PER_LB * 9.80665;
+const KW_PER_HP = 0.745699872;
+
+/** Force [N] in the system's unit. */
+export function toForce(newtons: number, system: UnitSystem): number {
+  return system === 'us' ? newtons / N_PER_LBF : newtons;
+}
+
+/** Power [kW] in the system's unit. */
+export function toPower(kilowatts: number, system: UnitSystem): number {
+  return system === 'us' ? kilowatts / KW_PER_HP : kilowatts;
+}
+
+/** Mass [kg] in the system's unit, and back. */
+export function toMass(kg: number, system: UnitSystem): number {
+  return system === 'us' ? kg / KG_PER_LB : kg;
+}
+export function fromMass(value: number, system: UnitSystem): number {
+  return system === 'us' ? value * KG_PER_LB : value;
+}
+
+/** Area [m²] in the system's unit, and back. */
+export function toArea(m2: number, system: UnitSystem): number {
+  return system === 'us' ? m2 / (M_PER_FT * M_PER_FT) : m2;
+}
+export function fromArea(value: number, system: UnitSystem): number {
+  return system === 'us' ? value * M_PER_FT * M_PER_FT : value;
+}
+
+/** Length [m] in the system's unit. */
+export function toLength(metres: number, system: UnitSystem): number {
+  return system === 'us' ? metres / M_PER_FT : metres;
 }
 
 /** Pick one airspeed out of a set, in display units (Mach is unitless). */
@@ -115,9 +162,9 @@ export function axisToTas(x: number, atmosphere: AtmosphereState, view: ViewSett
 export interface ChartWindow {
   /** Right edge of the x-axis, in the view's axis and unit (left edge is 0) */
   readonly xMax: number;
-  /** Top of the drag chart [N] */
+  /** Top of the drag chart, in N or lbf */
   readonly dragMax: number;
-  /** Top of the power chart [kW] */
+  /** Top of the power chart, in kW or hp */
   readonly powerMax: number;
   /** Top of the L/D chart [-] */
   readonly liftToDragMax: number;
@@ -157,8 +204,8 @@ export function chartWindow(aircraft: Aircraft, view: ViewSettings): ChartWindow
 
   return {
     xMax: tasToAxis(tasMax, seaLevel, view),
-    dragMax: niceCeiling(dragMax * 1.05),
-    powerMax: niceCeiling(powerMax * 1.05),
+    dragMax: niceCeiling(toForce(dragMax, view.system) * 1.05),
+    powerMax: niceCeiling(toPower(powerMax, view.system) * 1.05),
     liftToDragMax: niceCeiling(maxLiftToDrag(aircraft) * 1.1),
   };
 }
@@ -193,7 +240,7 @@ export interface ChartModel {
   readonly drag: readonly number[];
   readonly parasiteDrag: readonly number[];
   readonly inducedDrag: readonly number[];
-  /** Power required [kW] */
+  /** Power required, in kW or hp by the view's system. Drag arrays are in N or lbf */
   readonly power: readonly number[];
   readonly liftToDrag: readonly number[];
   readonly markers: readonly MarkerView[];
@@ -255,10 +302,10 @@ export function buildChartModel(scenario: Scenario, view: ViewSettings): ChartMo
     });
     for (const p of curve.points) {
       x.push(axisValue(p.speeds, view));
-      drag.push(p.drag);
-      parasiteDrag.push(p.parasiteDrag);
-      inducedDrag.push(p.inducedDrag);
-      power.push(p.powerRequired / 1000);
+      drag.push(toForce(p.drag, view.system));
+      parasiteDrag.push(toForce(p.parasiteDrag, view.system));
+      inducedDrag.push(toForce(p.inducedDrag, view.system));
+      power.push(toPower(p.powerRequired / 1000, view.system));
       liftToDrag.push(p.liftToDrag);
     }
   }

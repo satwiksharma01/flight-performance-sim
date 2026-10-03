@@ -20,8 +20,8 @@ import type { Aircraft } from '../../physics/aero.js';
 
 export const CESSNA_172S: Aircraft = {
   name: 'Cessna 172S (representative)',
-  mass: 1156.7, // 2,550 lb, the 172S's max takeoff weight (2,450 lb is the 172R's)
-  wingArea: 16.17, // 174 ft²
+  mass: 2550 * 0.45359237, // 2,550 lb exactly, the 172S's max takeoff weight (2,450 lb is the 172R's)
+  wingArea: 174 * 0.3048 * 0.3048, // 174 ft² exactly
   aspectRatio: 7.48, // 36 ft 1 in span over 174 ft²
   oswaldEfficiency: 0.75,
   cd0: 0.036,

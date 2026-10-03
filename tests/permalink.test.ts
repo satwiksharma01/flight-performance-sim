@@ -29,7 +29,7 @@ describe('writePermalink', () => {
   });
 
   it('adds view settings only when they differ from the defaults', () => {
-    const state: Permalink = { ...DEFAULT_STATE, view: { axis: 'eas', unit: 'mps' } };
+    const state: Permalink = { ...DEFAULT_STATE, view: { axis: 'eas', unit: 'mps', system: 'si' } };
     expect(writePermalink(state)).toBe('ac=c172&x=eas&u=mps');
   });
 });
@@ -47,7 +47,7 @@ describe('readPermalink', () => {
     const { scenario, view, problems } = readPermalink('ac=sailplane&x=cas&u=kmh');
     expect(problems).toEqual([]);
     expect(scenario.presetId).toBe('sailplane');
-    expect(view).toEqual({ axis: 'cas', unit: 'kmh' });
+    expect(view).toEqual({ axis: 'cas', unit: 'kmh', system: 'si' });
   });
 
   it('reports unknown view settings and falls back to the defaults', () => {
@@ -76,7 +76,7 @@ describe('canonicalize', () => {
         tas: 61.5,
       },
       basePresetId: 'c172',
-      view: { axis: 'eas', unit: 'kt' },
+      view: { axis: 'eas', unit: 'kt', system: 'us' },
     };
     expect(canonicalize(state)).toEqual(state);
   });
@@ -87,5 +87,19 @@ describe('canonicalize', () => {
       scenario: { ...DEFAULT_SCENARIO, presetId: null, aircraft: { ...CESSNA_172S } },
     };
     expect(canonicalize(reverted).scenario.presetId).toBe('c172');
+  });
+});
+
+describe('unit system in the link', () => {
+  it('writes sys=us and reads it back', () => {
+    const state: Permalink = { ...DEFAULT_STATE, view: { ...DEFAULT_VIEW, system: 'us' } };
+    expect(writePermalink(state)).toBe('ac=c172&sys=us');
+    expect(readPermalink('ac=c172&sys=us').view.system).toBe('us');
+  });
+
+  it('reports an unknown unit system and falls back to SI', () => {
+    const { view, problems } = readPermalink('sys=cubits');
+    expect(view.system).toBe('si');
+    expect(problems[0]).toContain('cubits');
   });
 });

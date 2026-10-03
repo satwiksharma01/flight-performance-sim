@@ -4,10 +4,21 @@
  */
 
 import type { AirspeedSet } from '../physics/index.js';
-import { axisValue, toUnit, type SpeedAxis, type SpeedUnit, type ViewSettings } from './model.js';
+import {
+  SYSTEM_UNITS,
+  axisValue,
+  toForce,
+  toLength,
+  toMass,
+  toPower,
+  toUnit,
+  type SpeedAxis,
+  type SpeedUnit,
+  type UnitSystem,
+  type ViewSettings,
+} from './model.js';
 
 const FT_PER_M = 1 / 0.3048;
-const HP_PER_KW = 1 / 0.745699872;
 
 export const AXIS_NAME: Record<SpeedAxis, string> = {
   tas: 'TAS',
@@ -42,8 +53,29 @@ export function feet(metres: number): string {
   return `${num(metres * FT_PER_M)} ft`;
 }
 
-export function horsepower(kilowatts: number): string {
-  return `${num(kilowatts * HP_PER_KW)} hp`;
+/** A force [N] in the system's unit: "1,209 N" or "272 lbf". */
+export function force(newtons: number, system: UnitSystem): string {
+  return `${num(toForce(newtons, system))} ${SYSTEM_UNITS[system].force}`;
+}
+
+/** A power [kW] in the system's unit: "35.3 kW" or "47 hp". */
+export function power(kilowatts: number, system: UnitSystem): string {
+  return `${num(toPower(kilowatts, system), system === 'si' ? 1 : 0)} ${SYSTEM_UNITS[system].power}`;
+}
+
+/** The same power in the other system, for a secondary readout. */
+export function otherPower(kilowatts: number, system: UnitSystem): string {
+  return power(kilowatts, system === 'si' ? 'us' : 'si');
+}
+
+/** A mass [kg] in the system's unit. */
+export function mass(kg: number, system: UnitSystem): string {
+  return `${num(toMass(kg, system))} ${SYSTEM_UNITS[system].mass}`;
+}
+
+/** A length [m] in the system's unit. */
+export function length(metres: number, system: UnitSystem): string {
+  return `${num(toLength(metres, system))} ${SYSTEM_UNITS[system].length}`;
 }
 
 /** Decimals that suit a speed unit: whole knots, tenths of m/s. */
