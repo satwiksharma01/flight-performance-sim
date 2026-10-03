@@ -2,10 +2,10 @@
 // The /validation page shows it as the last recorded run; CI re-runs the check on every push.
 
 export const CROSS_CHECK = {
-  ranOn: "2026-10-03",
+  ranOn: "2026-10-04",
   python: "3.13.2",
   scipy: "1.16.2",
-  sweep: "57 atmospheres x 5 airspeeds, 9 polar cases, 20 climb and glide cases, 8 ceiling pairs",
+  sweep: "57 atmospheres x 5 airspeeds, 9 polar cases, 20 climb and glide cases, 8 ceiling pairs, 6 V-n diagrams, 10 turn cases, 90 takeoff and landing cases",
   checks: [
     { quantity: "T", worst: 0.0, limit: 1e-12, where: "", pass: true },
     { quantity: "p", worst: 2.090656413356123e-16, limit: 1e-12, where: "h=84000 m, dISA=-20", pass: true },
@@ -29,12 +29,19 @@ export const CROSS_CHECK = {
     { quantity: "climb angle", worst: 7.216449660063518e-16, limit: 1e-09, where: "turboprop at Hp 3000 m, dISA 0, V 40", pass: true },
     { quantity: "V_y", worst: 2.1563671380187987e-08, limit: 1e-05, where: "turboprop at Hp 0 m, dISA 0", pass: true },
     { quantity: "V_x", worst: 2.275687913568359e-08, limit: 1e-05, where: "jet-trainer at Hp 0 m, dISA 0", pass: true },
-    { quantity: "ROC at V_y", worst: 1.5444403921587337e-15, limit: 1e-09, where: "c172 at Hp 6000 m, dISA -10", pass: true },
+    { quantity: "ROC at V_y", worst: 3.324300866321335e-15, limit: 1e-09, where: "c172 at Hp 6000 m, dISA -10", pass: true },
     { quantity: "V_max", worst: 1.85325935115685e-09, limit: 1e-08, where: "c172 at Hp 3000 m, dISA 0", pass: true },
     { quantity: "ceilings [m]", worst: 0.0034493948969611665, limit: 0.05, where: "jet-trainer service, dISA 0", pass: true },
     { quantity: "best glide", worst: 0.0, limit: 1e-12, where: "", pass: true },
     { quantity: "min-sink speed", worst: 1.550805010243396e-08, limit: 1e-05, where: "jet-trainer at Hp 3000 m, dISA 0", pass: true },
     { quantity: "glide into wind", worst: 1.5829307609335085e-08, limit: 1e-05, where: "sailplane at Hp 3000 m, dISA 0", pass: true },
     { quantity: "min sink", worst: 1.0185772043941922e-09, limit: 1e-08, where: "c172 at Hp 3000 m, dISA 15", pass: true },
+    { quantity: "V-n speeds", worst: 1.6129090799382016e-16, limit: 1e-12, where: "sailplane at Hp 0 m", pass: true },
+    { quantity: "V-n boundaries", worst: 8.881784197001252e-16, limit: 1e-12, where: "c172 at Hp 6000 m, gust lower at 64.0 m/s", pass: true },
+    { quantity: "gust factor", worst: 0.0, limit: 1e-12, where: "", pass: true },
+    { quantity: "turn load factor", worst: 1.1724740030174353e-15, limit: 1e-11, where: "turbo-piston at Hp 0 m, dISA 0, V 30, sustained", pass: true },
+    { quantity: "specific excess power", worst: 9.880984919163893e-15, limit: 1e-12, where: "jet-trainer at Hp 3000 m, dISA 15, V 120, n 2.5", pass: true },
+    { quantity: "takeoff distances", worst: 1.3267417629855275e-11, limit: 1e-07, where: "turbo-piston at Hp 2500 m, dISA -10, wind -2.5, mu 0.07, groundRoll", pass: true },
+    { quantity: "landing distances", worst: 7.930942320681863e-08, limit: 1e-07, where: "sailplane at Hp 1500 m, dISA 20, wind 0, mu 0.04, groundRoll", pass: true },
   ],
 } as const;

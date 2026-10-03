@@ -14,6 +14,10 @@ import { PRESETS } from '../src/data/aircraft/presets.js';
 import { ceilings, climbAt, climbPerformance, isPowered, type PoweredAircraft } from '../src/physics/performance/climb.js';
 import { bestGlide, bestGlideInWind, minimumSink } from '../src/physics/performance/glide.js';
 import { lapseRatio, thrustAvailable } from '../src/physics/propulsion.js';
+import { specificExcessPower } from '../src/physics/performance/energy.js';
+import { RUNWAY_SURFACES, landing, takeoff } from '../src/physics/performance/field.js';
+import { liftLimitedLoadFactor, sustainedLoadFactor } from '../src/physics/performance/turn.js';
+import { vnBoundaries, vnDiagram } from '../src/physics/performance/vn.js';
 import type { Aircraft } from '../src/physics/aero.js';
 
 /** Engines no preset uses, so every model is checked. */
@@ -96,9 +100,58 @@ it('exports the sweep', () => {
     .filter(([, ac]) => isPowered(ac))
     .flatMap(([id, ac]) => [0, 15].map((d) => ({ id, ac, d, ...ceilings(ac as PoweredAircraft, d) })));
 
+  // V-n diagrams: the speeds, and the boundaries at fractions of V_D.
+  const envelope = Object.entries(PRESETS).flatMap(([id, ac]) => {
+    const limits = ac.structure;
+    if (!limits) return [];
+    return [0, 6000].map((hp) => {
+      const atm = atPressureAltitude(hp);
+      const d = vnDiagram(ac, limits, hp, atm.density);
+      return {
+        id, ac, hp, rho: atm.density,
+        vs: d.stallSpeed, va: d.maneuveringSpeed, vneg: d.negativeCornerSpeed, kg: d.alleviation.factor,
+        at: [0.1, 0.3, 0.5, 0.7, 0.85, 0.95, 1].map((f) => ({ eas: f * limits.diveSpeed, ...vnBoundaries(d, f * limits.diveSpeed) })),
+      };
+    });
+  });
+
+  // Turns and specific excess power at a few speeds and load factors.
+  const turns = Object.entries(all).flatMap(([id, ac]) =>
+    ([[0, 0], [3000, 15]] as const).map(([hp, d]) => {
+      const atm = atPressureAltitude(hp, d);
+      const lapse = ac.propulsion ? lapseRatio(ac.propulsion, atm) : 0;
+      return {
+        id, ac, hp, d, rho: atm.density, lapse,
+        at: [30, 60, 120].map((v) => {
+          const thrust = ac.propulsion ? thrustAvailable(ac.propulsion, v, lapse) : null;
+          return {
+            v,
+            nLift: liftLimitedLoadFactor(ac, atm.density, v),
+            nSustained: thrust === null ? null : sustainedLoadFactor(ac, atm.density, v, thrust),
+            ps: [1, 1.5, 2.5].map((n) => specificExcessPower(ac, atm, v, n, lapse)),
+          };
+        }),
+      };
+    }),
+  );
+
+  // Takeoff and landing across conditions, surfaces and winds.
+  const field = Object.entries(all).flatMap(([id, ac]) =>
+    ([[0, 0], [1500, 20], [2500, -10]] as const).flatMap(([hp, d]) =>
+      (['dry-paved', 'soft-turf'] as const).flatMap((surface) =>
+        [0, 5, -2.5].map((wind) => {
+          const atm = atPressureAltitude(hp, d);
+          const runway = RUNWAY_SURFACES[surface];
+          return { id, ac, hp, d, rho: atm.density, lapse: ac.propulsion ? lapseRatio(ac.propulsion, atm) : 0,
+            runway, wind, takeoff: takeoff(ac, atm, runway, wind), landing: landing(ac, atm, runway, wind) };
+        }),
+      ),
+    ),
+  );
+
   mkdirSync(OUT, { recursive: true });
   writeFileSync(
     join(OUT, 'ts-output.json'),
-    JSON.stringify({ atmosphere, aero, performance, ceilings: ceilingRows }, null, 1),
+    JSON.stringify({ atmosphere, aero, performance, ceilings: ceilingRows, envelope, turns, field }, null, 1),
   );
 });

@@ -19,7 +19,10 @@ import { atPressureAltitude } from '../../physics/atmosphere.js';
 import { pitotPressureRatio } from '../../physics/airspeed.js';
 import { maxLiftToDrag, stallSpeed, vMinDrag, type Aircraft } from '../../physics/aero.js';
 import { ceilings, climbPerformance, type PoweredAircraft } from '../../physics/performance/climb.js';
+import { RUNWAY_SURFACES, landing, takeoff } from '../../physics/performance/field.js';
+import { vnDiagram, type StructuralLimits } from '../../physics/performance/vn.js';
 import { CESSNA_172S } from '../aircraft/presets.js';
+import { POH_SOURCE, pohCondition } from './poh-c172s.js';
 
 export type Role = 'reference' | 'calibration' | 'check' | 'discrepancy';
 
@@ -43,7 +46,7 @@ export interface ValidationCase {
   readonly note?: string;
 }
 
-export type GroupId = 'atmosphere' | 'compressible' | 'textbook' | 'c172';
+export type GroupId = 'atmosphere' | 'compressible' | 'textbook' | 'c172' | 'c172-field';
 
 export interface ValidationGroup {
   readonly id: GroupId;
@@ -76,6 +79,12 @@ export const GROUPS: readonly ValidationGroup[] = [
     intro:
       '2,550 lb, sea level, standard day, clean. Each fitted parameter takes exactly two published figures; the checks are figures the fit never used. POH speeds are KIAS: at these speeds the 172S’s position error is about a knot, so KIAS ≈ KCAS, and at sea level KCAS = KTAS.',
   },
+  {
+    id: 'c172-field',
+    title: 'Cessna 172S: limits, takeoff and landing',
+    intro:
+      'The V-n diagram’s speeds and the short-field distances, against POH sections 2 and 5. Speeds here are KCAS, from the POH’s own KCAS columns. Distances use Raymer’s method with Gudmundsson’s friction for dry pavement, and nothing is fitted to them: where they miss, the miss is pinned with its cause. The full POH tables, cell by cell, follow.',
+  },
 ];
 
 const KT = 1852 / 3600;
@@ -105,6 +114,23 @@ const seaLevel = lazy(() => atPressureAltitude(0));
 const c172 = CESSNA_172S as PoweredAircraft;
 const c172Climb = lazy(() => climbPerformance(c172, seaLevel()));
 const c172Ceilings = lazy(() => ceilings(c172));
+const c172Limits = CESSNA_172S.structure as StructuralLimits;
+const maneuveringSpeed = (lb: number) =>
+  vnDiagram({ ...c172, mass: lb * LB }, c172Limits, 0, seaLevel().density).maneuveringSpeed / KT;
+const dry = RUNWAY_SURFACES['dry-paved'];
+const takeoffAt = (ft: number, oat: number) => {
+  const r = takeoff(c172, pohCondition(ft, oat), dry);
+  if (!r.ok) throw new Error(r.reason);
+  return r;
+};
+const landingAt = (ft: number, oat: number) => {
+  const r = landing(c172, pohCondition(ft, oat), dry);
+  if (!r.ok) throw new Error(r.reason);
+  return r;
+};
+const c172Takeoff = lazy(() => takeoffAt(0, 15));
+const c172Landing = lazy(() => landingAt(0, 15));
+const POH_SPECIFICATIONS = 'Cessna 172S Pilot’s Operating Handbook (2007), performance specifications';
 
 const atmosphereRows = (
   [
@@ -382,6 +408,130 @@ export const CASES: readonly ValidationCase[] = [
     band: [110, 120],
     source: SOURCE.poh,
     note: 'The polar was fitted to a glide flown with the propeller windmilling. That drag is real in the glide but absent in powered flight, so the model overstates drag at high speed. Pinned, not retuned: if a change moves it, that is worth noticing.',
+  },
+  {
+    id: 'c172-stall-takeoff-flap',
+    group: 'c172-field',
+    quantity: 'Stall speed, 10° flap',
+    condition: '2,550 lb, takeoff flap',
+    role: 'calibration',
+    published: 50,
+    unit: 'kt',
+    decimals: 1,
+    model: () => stallSpeed(c172, seaLevel().density, 1, c172.clMaxTakeoff) / KT,
+    tolerance: { absolute: 0.5 },
+    source: POH_SOURCE,
+    note: 'Sets takeoff CLmax = 1.73.',
+  },
+  ...(
+    [
+      [2550, 102],
+      [2200, 95],
+      [1900, 88],
+    ] as const
+  ).map(
+    ([lb, kcas]): ValidationCase => ({
+      id: `c172-va-${lb}`,
+      group: 'c172-field',
+      quantity: 'Manoeuvring speed',
+      condition: `V_A, ${lb.toLocaleString('en-US')} lb`,
+      role: 'check',
+      published: kcas,
+      unit: 'kt',
+      decimals: 1,
+      model: () => maneuveringSpeed(lb),
+      tolerance: { absolute: 2 },
+      source: 'Cessna 172S Pilot’s Operating Handbook (2007), section 2',
+      ...(lb === 2550
+        ? { note: 'V_s√n at the +3.8 g limit: the clean-stall calibration and the load-factor scaling. V_A itself was never fitted.' }
+        : {}),
+    }),
+  ),
+  {
+    id: 'c172-stall-60',
+    group: 'c172-field',
+    quantity: 'Stall speed, 60° bank',
+    condition: '2,550 lb, clean, n = 2',
+    role: 'check',
+    published: 75,
+    unit: 'kt',
+    decimals: 1,
+    model: () => stallSpeed(c172, seaLevel().density, 2) / KT,
+    tolerance: { absolute: 2 },
+    source: POH_SOURCE,
+  },
+  {
+    id: 'c172-takeoff-roll',
+    group: 'c172-field',
+    quantity: 'Takeoff ground roll',
+    condition: 'short field, sea level, 15 °C',
+    role: 'discrepancy',
+    published: 960,
+    unit: 'ft',
+    decimals: 0,
+    model: () => c172Takeoff().groundRoll / FT,
+    tolerance: { relative: 0.1 },
+    band: [790, 880],
+    source: POH_SPECIFICATIONS,
+    note: '13 % short, and the gap widens on hot days (see the table below). Probable causes: the propeller’s 3,035 N static thrust is the straight thrust line extended from a fit at climb speed, not a measurement, and the drag of the 10° flap isn’t modelled.',
+  },
+  {
+    id: 'c172-takeoff-total',
+    group: 'c172-field',
+    quantity: 'Takeoff over 50 ft',
+    condition: 'short field, sea level, 15 °C',
+    role: 'discrepancy',
+    published: 1630,
+    unit: 'ft',
+    decimals: 0,
+    model: () => c172Takeoff().total / FT,
+    tolerance: { relative: 0.1 },
+    band: [1310, 1460],
+    source: POH_SPECIFICATIONS,
+    note: '15 % short: the ground roll’s shortfall, plus a climb to 50 ft that is steeper than the POH’s.',
+  },
+  {
+    id: 'c172-takeoff-density',
+    group: 'c172-field',
+    quantity: 'Takeoff ground roll, hot and high',
+    condition: '8,000 ft and 40 °C, over sea level and 15 °C',
+    role: 'check',
+    published: 2450 / 960,
+    unit: '×',
+    decimals: 2,
+    model: () => takeoffAt(8000, 40).groundRoll / c172Takeoff().groundRoll,
+    tolerance: { relative: 0.1 },
+    source: POH_SOURCE,
+    note: 'The density-altitude effect alone: engine lapse, a faster lift-off in true airspeed, less excess thrust. As a ratio, the sea-level shortfall above cancels.',
+  },
+  {
+    id: 'c172-landing-roll',
+    group: 'c172-field',
+    quantity: 'Landing ground roll',
+    condition: 'short field, sea level, 15 °C',
+    role: 'discrepancy',
+    published: 575,
+    unit: 'ft',
+    decimals: 0,
+    model: () => c172Landing().groundRoll / FT,
+    tolerance: { relative: 0.1 },
+    band: [430, 480],
+    source: POH_SPECIFICATIONS,
+    note: '21 % short, and uniformly so across the POH table: braking, not density. The model brakes at Gudmundsson’s 0.4 for dry pavement; the POH’s figure needs about 0.29. Plausibly, a light aircraft’s brakes without anti-skid don’t use all the friction available.',
+  },
+  {
+    id: 'c172-landing-density',
+    group: 'c172-field',
+    quantity: 'Landing ground roll, hot and high',
+    condition: '8,000 ft and 40 °C, over sea level and 15 °C',
+    role: 'check',
+    published: 840 / 575,
+    unit: '×',
+    decimals: 2,
+    model: () => landingAt(8000, 40).groundRoll / c172Landing().groundRoll,
+    tolerance: { relative: 0.1 },
+    source: POH_SOURCE,
+    note: 'Touchdown speed in true airspeed grows as 1/√σ; the braking error cancels in the ratio.',
   },
 ];
 

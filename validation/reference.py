@@ -12,6 +12,11 @@ TypeScript, so a shared mistake is unlikely:
 - the exact steady climb as a root of its force balance (the TS iterates a
   fixed point), V_y and V_x by Brent's bounded minimiser (the TS uses golden
   section), ceilings by brentq, and glides directly from their definitions
+- V-n boundaries by interpolating the envelope's vertices (the TS evaluates
+  each constraint), V_A and the negative corner by root-finding, the
+  sustained turn as a root of thrust = drag
+- takeoff and landing runs integrated in time with an adaptive ODE solver
+  (the TS integrates over airspeed with Simpson's rule)
 
 Run with `npm run validate`, which exports the TypeScript outputs first.
 Exits non-zero if any quantity disagrees beyond its tolerance.
@@ -22,6 +27,8 @@ import math
 import sys
 from pathlib import Path
 
+import numpy as np
+from scipy.integrate import solve_ivp
 from scipy.optimize import brentq, minimize_scalar
 
 G0 = 9.80665
@@ -135,16 +142,21 @@ def isa_hp(hp, d_isa=0.0):
     return dict(T=T, p=p, rho=p / (R * T), sigma=p / (R * T) / RHO0)
 
 
-def lapse(engine, hp, sigma):
+def lapse(engine, hp, sigma, d_isa=0.0):
     gf = lambda s: max(0.0, 1.132 * s - 0.132)
     if engine["kind"] == "piston":
+        # Gagg-Farrar at the standard day's density for this pressure altitude,
+        # times sqrt(T_std / T) for a hot or cold day.
+        Ts, p = standard(hp)
+        sigma_std = p / (R * Ts) / RHO0
+        hot = math.sqrt(Ts / (Ts + d_isa))
         hc = engine.get("criticalAltitude")
         if hc is None:
-            return gf(sigma)
+            return gf(sigma_std) * hot
         if hp <= hc:
-            return 1.0
+            return hot
         Tc, pc = standard(hc)
-        return gf(sigma / (pc / (R * Tc) / RHO0))
+        return gf(sigma_std / (pc / (R * Tc) / RHO0)) * hot
     return sigma ** engine["lapseExponent"]
 
 
@@ -183,7 +195,7 @@ def climb_exact(ac, v, rho, lap):
 
 def climb_speeds(ac, hp, d):
     st = isa_hp(hp, d)
-    rho, lap = st["rho"], lapse(ac["propulsion"], hp, st["sigma"])
+    rho, lap = st["rho"], lapse(ac["propulsion"], hp, st["sigma"], d)
     W = ac["mass"] * G0
     cd0, k = polar(ac)
     vs = math.sqrt(2 * W / (rho * ac["wingArea"] * ac["clMax"]))
@@ -224,6 +236,137 @@ def glides(ac, rho):
     return best, sink, wind
 
 
+# --- V-n diagram -----------------------------------------------------------
+
+FT = 0.3048
+
+
+def vn_reference(ac, hp, rho):
+    """Speeds and a boundary function, built from the envelope's vertices."""
+    lim = ac["structure"]
+    W = ac["mass"] * G0
+    ws = W / ac["wingArea"]
+    n_stall = lambda v, cl: 0.5 * RHO0 * v * v * cl / ws
+    vs = brentq(lambda v: n_stall(v, ac["clMax"]) - 1, 1e-3, 1e4, xtol=1e-14)
+    va = brentq(lambda v: n_stall(v, ac["clMax"]) - lim["nPositive"], 1e-3, 1e4, xtol=1e-14)
+    vneg = brentq(lambda v: n_stall(v, lim["clMin"]) - lim["nNegative"], 1e-3, 1e4, xtol=1e-14)
+    # Lift slope (Helmbold/DATCOM, section slope 0.95 x 2 pi), mass ratio, alleviation.
+    A = ac["aspectRatio"]
+    a = 2 * math.pi * A / (2 + math.sqrt(4 + (A / 0.95) ** 2))
+    chord = ac["wingArea"] / math.sqrt(A * ac["wingArea"])
+    mu = 2 * ws / (rho * chord * a * G0)
+    kg = 0.88 * mu / (5.3 + mu)
+    ft = hp / FT
+    scale = 1 if ft <= 20000 else max(0.5, 1 - 0.5 * (ft - 20000) / 30000)
+    dn = lambda u, v: kg * RHO0 * u * v * a / (2 * ws)
+    vc, vd = lim["cruiseSpeed"], lim["diveSpeed"]
+    uc, ud = 50 * FT * scale, 25 * FT * scale
+    gust_up = ([0, vc, vd], [1, 1 + dn(uc, vc), 1 + dn(ud, vd)])
+    gust_dn = ([0, vc, vd], [1, 1 - dn(uc, vc), 1 - dn(ud, vd)])
+    taper = ([0, vc, vd], [lim["nNegative"], lim["nNegative"], 0])
+
+    def at(v):
+        up_m = min(n_stall(v, ac["clMax"]), lim["nPositive"])
+        lo_m = max(n_stall(v, lim["clMin"]), float(np.interp(v, *taper)))
+        gu, gd = float(np.interp(v, *gust_up)), float(np.interp(v, *gust_dn))
+        return dict(
+            maneuver=dict(upper=up_m, lower=lo_m), gust=dict(upper=gu, lower=gd),
+            design=dict(upper=min(n_stall(v, ac["clMax"]), max(up_m, gu)),
+                        lower=max(n_stall(v, lim["clMin"]), min(lo_m, gd))),
+        )
+
+    return dict(vs=vs, va=va, vneg=vneg, kg=kg, at=at)
+
+
+# --- Turns and specific excess power -----------------------------------------
+
+def n_lift(ac, rho, v):
+    W = ac["mass"] * G0
+    return brentq(lambda n: n * W / (0.5 * rho * v * v * ac["wingArea"]) - ac["clMax"], 0, 1e6, xtol=1e-14)
+
+
+def n_sustained(ac, rho, v, T):
+    W = ac["mass"] * G0
+    f = lambda n: T - drag_for_lift(ac, v, rho, n * W)
+    if f(0) <= 0:
+        return None
+    hi = 1.0
+    while f(hi) > 0:
+        hi *= 2
+    return brentq(f, 0, hi, xtol=1e-14)
+
+
+def ps(ac, rho, v, n, lap):
+    T = thrust(ac["propulsion"], v, lap) if "propulsion" in ac else 0.0
+    return v * (T - drag_for_lift(ac, v, rho, n * ac["mass"] * G0)) / (ac["mass"] * G0)
+
+
+# --- Takeoff and landing ------------------------------------------------------
+
+OBSTACLE = 50 * FT
+
+
+def run_in_time(accel, v_start, v_end, wind):
+    """Integrate dV/dt = accel(V), ds/dt = V - wind in time, from airspeed v_start until v_end."""
+    if v_start == v_end:
+        return 0.0
+    event = lambda t, y: y[0] - v_end
+    event.terminal = True
+    sol = solve_ivp(lambda t, y: [accel(y[0]), y[0] - wind], (0, 1e5), [v_start, 0.0],
+                    events=event, rtol=1e-11, atol=1e-11, method="DOP853")
+    assert sol.status == 1, "run did not reach its end speed"
+    return sol.y_events[0][0][1]
+
+
+def field_reference(ac, rho, lap, runway, wind):
+    W = ac["mass"] * G0
+    S = ac["wingArea"]
+    cd0, k = polar(ac)
+    out = {}
+    if "propulsion" in ac:
+        clmax = ac.get("clMaxTakeoff", ac["clMax"])
+        vs = math.sqrt(2 * W / (rho * S * clmax))
+        vlof, vtr = 1.1 * vs, 1.15 * vs
+        # Ground CL: mu / 2k, but lift may not reach weight before lift-off.
+        cl = min(runway["rolling"] / (2 * k), clmax / 1.1 ** 2)
+        cd = cd0 + k * cl * cl
+
+        def acc(v):
+            q = 0.5 * rho * v * v * S
+            T = thrust(ac["propulsion"], max(v, 1e-9), lap)
+            return G0 / W * (T - math.copysign(q * cd, v) - runway["rolling"] * max(W - (q * cl if v > 0 else 0), 0))
+
+        run = run_in_time(acc, min(wind, vlof), vlof, wind)
+        rot = max(vlof - wind, 0) * 1.0
+        gamma = math.asin((thrust(ac["propulsion"], vtr, lap) - drag_for_lift(ac, vtr, rho, W)) / W)
+        R_ = vtr ** 2 / (0.2 * G0)
+        h_tr = R_ * (1 - math.cos(gamma))
+        if h_tr >= OBSTACLE:
+            air = math.sqrt(R_ ** 2 - (R_ - OBSTACLE) ** 2)
+        else:
+            air = R_ * math.sin(gamma) + (OBSTACLE - h_tr) / math.tan(gamma)
+        air *= max(vtr - wind, 0) / vtr
+        out["takeoff"] = dict(groundRoll=run + rot, total=run + rot + air)
+    clmax_ldg = ac.get("clMaxFlaps", ac["clMax"])
+    vs0 = math.sqrt(2 * W / (rho * S * clmax_ldg))
+    va, vf, vtd = 1.3 * vs0, 1.23 * vs0, 1.15 * vs0
+    th = math.radians(3)
+    R_ = vf ** 2 / (0.2 * G0)
+    hf = min(R_ * (1 - math.cos(th)), OBSTACLE)
+    air = (OBSTACLE - hf) / math.tan(th) * (va - wind) / va + R_ * math.sin(th) * (vf - wind) / vf
+    cl = min(runway["rolling"] / (2 * k), clmax_ldg / 1.15 ** 2)
+    cd = cd0 + k * cl * cl
+
+    def dec(v):
+        q = 0.5 * rho * v * v * S
+        return -G0 / W * (math.copysign(q * cd, v) + runway["braking"] * max(W - (q * cl if v > 0 else 0), 0))
+
+    brake = run_in_time(dec, vtd, wind, wind)
+    free = (vtd - wind) * 1.0
+    out["landing"] = dict(groundRoll=free + brake, total=air + free + brake)
+    return out
+
+
 # Relative tolerances, except altitudes (absolute, metres). Each is set by the
 # reference's own precision, not by what the TS happens to achieve.
 TOLERANCE = {
@@ -241,6 +384,10 @@ TOLERANCE = {
     "ceilings [m]": 0.05,         # both bisect to a centimetre or better
     "best glide": 1e-12, "min-sink speed": 1e-5, "glide into wind": 1e-5,
     "min sink": 1e-8,     # where the optimum is the CLmax bound, the slope there lets solver precision show
+    "V-n speeds": 1e-12, "V-n boundaries": 1e-12, "gust factor": 1e-12,
+    "turn load factor": 1e-11,    # brentq roots
+    "specific excess power": 1e-12,
+    "takeoff distances": 1e-7, "landing distances": 1e-7,  # Simpson in speed vs DOP853 in time
 }
 
 
@@ -262,7 +409,8 @@ def write_summary(worst, ts):
         )
     sweep = (
         f"{len(ts['atmosphere'])} atmospheres x 5 airspeeds, {len(ts['aero'])} polar cases, "
-        f"{len(ts['performance'])} climb and glide cases, {len(ts['ceilings'])} ceiling pairs"
+        f"{len(ts['performance'])} climb and glide cases, {len(ts['ceilings'])} ceiling pairs, "
+        f"{len(ts['envelope'])} V-n diagrams, {len(ts['turns'])} turn cases, {len(ts['field'])} takeoff and landing cases"
     )
     lines = [
         "// Generated by validation/reference.py (npm run validate). Do not edit.",
@@ -343,6 +491,44 @@ def main(path):
             ref = ceiling(row["ac"], row["d"], rate)
             if ref is not None and row[key] is not None:
                 track("ceilings [m]", row[key], ref, f"{row['id']} {key}, dISA {row['d']}", absolute=True)
+
+    for row in ts["envelope"]:
+        ref = vn_reference(row["ac"], row["hp"], row["rho"])
+        where = f"{row['id']} at Hp {row['hp']} m"
+        for key in ("vs", "va", "vneg"):
+            track("V-n speeds", row[key], ref[key], where)
+        track("gust factor", row["kg"], ref["kg"], where)
+        for point in row["at"]:
+            r = ref["at"](point["eas"])
+            for kind in ("maneuver", "gust", "design"):
+                for side in ("upper", "lower"):
+                    # Absolute: load factors pass through zero.
+                    err = abs(point[kind][side] - r[kind][side])
+                    if err > worst["V-n boundaries"][0]:
+                        worst["V-n boundaries"] = (err, f"{where}, {kind} {side} at {point['eas']:.1f} m/s")
+
+    for row in ts["turns"]:
+        ac, rho, where = row["ac"], row["rho"], f"{row['id']} at Hp {row['hp']} m, dISA {row['d']}"
+        for point in row["at"]:
+            v = point["v"]
+            track("turn load factor", point["nLift"], n_lift(ac, rho, v), f"{where}, V {v}")
+            if "propulsion" in ac:
+                ref = n_sustained(ac, rho, v, thrust(ac["propulsion"], v, row["lapse"]))
+                if ref is not None and point["nSustained"] is not None:
+                    track("turn load factor", point["nSustained"], ref, f"{where}, V {v}, sustained")
+            for n, value in zip((1, 1.5, 2.5), point["ps"]):
+                err = abs(value - ps(ac, rho, v, n, row["lapse"])) / max(abs(value), 1)
+                if err > worst["specific excess power"][0]:
+                    worst["specific excess power"] = (err, f"{where}, V {v}, n {n}")
+
+    for row in ts["field"]:
+        ref = field_reference(row["ac"], row["rho"], row["lapse"], row["runway"], row["wind"])
+        where = f"{row['id']} at Hp {row['hp']} m, dISA {row['d']}, wind {row['wind']}, mu {row['runway']['rolling']}"
+        for phase in ("takeoff", "landing"):
+            mine = row[phase]
+            if phase in ref and mine["ok"]:
+                for key in ("groundRoll", "total"):
+                    track(f"{phase} distances", mine[key], ref[phase][key], f"{where}, {key}")
 
     failed = False
     print("TypeScript core vs independent reference: worst disagreement")
