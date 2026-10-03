@@ -1,5 +1,7 @@
 # Flight Performance Simulator
 
+[![CI](https://github.com/satwiksharma01/Aerospace-Flight-Performance-Simulator/actions/workflows/ci.yml/badge.svg)](https://github.com/satwiksharma01/Aerospace-Flight-Performance-Simulator/actions/workflows/ci.yml)
+
 Aircraft performance analysis in the browser: drag, power, climb, ceilings and glide,
 responding instantly as you drag a slider. The physics core is dependency-free
 TypeScript, cross-checked against an independent Python implementation, against
@@ -10,8 +12,9 @@ published standards and textbook examples, and, for the Cessna 172S, against its
   <img alt="The explorer showing a Cessna 172S at 8,000 ft pressure altitude on an ISA +15 day: density altitude 9,721 ft, best rate of climb 285 ft/min, service ceiling 12,255 ft. Charts show drag with thrust available, power required and available, L/D, rate of climb with V_x, V_y and V_max, and best rate of climb against altitude down to the ceilings." src="docs/explorer-light.png">
 </picture>
 
-**Status:** v0.3: propulsion, climb, ceilings and glide. Tested and independently
-cross-checked; the site is not deployed yet. See [ROADMAP.md](ROADMAP.md).
+**Status:** v0.4, the validation release. A [/validation](validation.html) page shows
+the model against every published figure it's held to, and CI re-runs the tests and
+the independent cross-check on every push. Not deployed yet. See [ROADMAP.md](ROADMAP.md).
 
 ## What it shows
 
@@ -66,12 +69,33 @@ cross-checked; the site is not deployed yet. See [ROADMAP.md](ROADMAP.md).
 7. **Turbocharge it.** In the editor, give the engine a critical altitude of
    12,000 ft: the service ceiling jumps from 14,000 ft to about 24,000.
 
+## Validation
+
+The **Validation** page (`validation.html`) lists 31 published figures from four
+sources: the US Standard Atmosphere 1976 tables, NACA Report 1135, Anderson's worked
+examples, and the Cessna 172S POH. Each shows published value, model value,
+difference, tolerance and status, computed live in the browser.
+
+Every figure has a role, because "matches published data" means different things:
+
+| Role | Meaning |
+|---|---|
+| Reference | A standard or textbook value the physics must reproduce |
+| Calibration | A figure a parameter was fitted to. Reproducing it proves the fit, not the model |
+| Check | A figure the fit never saw. These are the real test |
+| Known discrepancy | A miss pinned to a band, with its cause, not tuned away |
+
+The figures live in one dataset, `src/data/validation/cases.ts`. The page renders it
+and `tests/published.test.ts` asserts it, so the two can't disagree. The page also
+shows the last run of the independent Python implementation, and CI runs both on
+every push.
+
 ## Running it
 
 ```bash
 npm install
-npm run dev          # the explorer, at http://localhost:5173
-npm test             # 237 tests
+npm run dev          # the explorer at http://localhost:5173, validation at /validation.html
+npm test             # 251 tests
 npm run validate     # cross-check against the independent Python reference (needs SciPy)
 npm run typecheck
 npm run build        # static site in dist/, relative paths, any host
@@ -97,7 +121,7 @@ npm run build        # static site in dist/, relative paths, any host
 | `src/app/permalink.ts` | View settings in the URL, and delta encoding for edited presets |
 | `src/app/components/` | React controls, readouts, and the uPlot chart with its marker overlays |
 
-237 tests, covering the published ISA table at five altitudes, layer continuity,
+251 tests, covering the published ISA table at five altitudes, layer continuity,
 profile inversion, every closed-form optimum cross-checked against a brute-force
 scan, permalink round-trip stability, and the chart model's physics: the drag curve
 is identical against EAS at every altitude and slides right by `sqrt(ρ₀/ρ)` against

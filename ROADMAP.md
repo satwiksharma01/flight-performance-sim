@@ -346,8 +346,11 @@ curve move. A complete product at a tiny scope.
       or root-finder sets the precision*
 - [x] Cessna 172S validation vs published data — *calibrated on stall, glide and
       climb; checked on V_x and service ceiling; V_max discrepancy pinned*
-- [ ] Public `/validation` page
-- [ ] CI running both test suites
+- [x] Public `/validation` page — *`validation.html`, rendered live from the dataset the
+      tests assert: 31 figures, 4 sources, roles reference / calibration / check /
+      known discrepancy, plus the Python cross-check's last run*
+- [x] CI running both test suites — *GitHub Actions: typecheck, tests, build,
+      `npm run validate`*
 
 ### v0.5 — Envelope and maneuver *(the "wow" release)*
 - [ ] V-n diagram
