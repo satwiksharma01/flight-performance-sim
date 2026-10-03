@@ -5,6 +5,9 @@ import {
   casToTas,
   compressibilityCorrection,
   easToTas,
+  impactPressure,
+  machFromImpactPressure,
+  pitotPressureRatio,
   tasToCas,
   tasToEas,
 } from '../src/physics/airspeed.js';
@@ -63,6 +66,27 @@ describe('CAS', () => {
     expect(
       Math.abs(compressibilityCorrection(50, sl.pressure, sl.density, sl.speedOfSound)),
     ).toBeLessThan(0.01);
+  });
+
+  it('joins the subsonic and Rayleigh pitot branches exactly at Mach 1', () => {
+    expect(pitotPressureRatio(1 - 1e-12)).toBeCloseTo(pitotPressureRatio(1), 10);
+    expect(pitotPressureRatio(1)).toBeCloseTo(Math.pow(1.2, 3.5), 12);
+  });
+
+  it.each([0.3, 0.8, 0.999, 1, 1.001, 1.5, 2.5, 5])(
+    'inverts impact pressure back to Mach %f',
+    (mach) => {
+      const p = 26500;
+      expect(machFromImpactPressure(impactPressure(mach, p), p)).toBeCloseTo(mach, 10);
+    },
+  );
+
+  it('round-trips TAS through CAS above Mach 1, and above sea-level Mach 1 in CAS', () => {
+    const state = isa(4000);
+    for (const tas of [380, 450, 700]) {
+      const cas = tasToCas(tas, state.pressure, state.speedOfSound);
+      expect(casToTas(cas, state.pressure, state.speedOfSound)).toBeCloseTo(tas, 6);
+    }
   });
 
   it('grows the compressibility correction with altitude and speed', () => {

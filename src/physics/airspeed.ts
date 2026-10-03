@@ -47,31 +47,75 @@ export function machToTas(mach: number, speedOfSound: number): number {
 }
 
 /**
- * Impact (differential) pressure from Mach number, subsonic [Pa].
+ * Pitot total pressure over static pressure, p_t / p [-].
  *
- * qc = p * [ (1 + (gamma-1)/2 * M^2)^(gamma/(gamma-1)) - 1 ]
+ * Subsonic, the flow decelerates isentropically into the probe:
  *
- * This is the compressible form. The incompressible `q = 1/2 rho V^2` is only
- * accurate to about M 0.3; using it for CAS would put a visible error into every
- * jet case.
+ *   p_t/p = (1 + (gamma-1)/2 * M^2)^(gamma/(gamma-1))
+ *
+ * Supersonic, a normal shock stands in front of it, and the Rayleigh pitot
+ * formula applies:
+ *
+ *   p_t/p = [ (gamma+1)^2 M^2 / (4 gamma M^2 - 2(gamma-1)) ]^(gamma/(gamma-1))
+ *           * (1 - gamma + 2 gamma M^2) / (gamma+1)
+ *
+ * The two meet exactly at Mach 1, at (1.2)^3.5 for gamma = 1.4.
  */
-export function impactPressure(mach: number, pressure: number): number {
-  const exponent = GAMMA / (GAMMA - 1);
-  return pressure * (Math.pow(1 + ((GAMMA - 1) / 2) * mach * mach, exponent) - 1);
+export function pitotPressureRatio(mach: number): number {
+  const g = GAMMA;
+  const exponent = g / (g - 1);
+  const m2 = mach * mach;
+  if (mach < 1) return Math.pow(1 + ((g - 1) / 2) * m2, exponent);
+  return (
+    Math.pow(((g + 1) * (g + 1) * m2) / (4 * g * m2 - 2 * (g - 1)), exponent) *
+    ((1 - g + 2 * g * m2) / (g + 1))
+  );
 }
 
-/** Mach number from impact and static pressure, subsonic. */
-export function machFromImpactPressure(qc: number, pressure: number): number {
-  const exponent = (GAMMA - 1) / GAMMA;
-  return Math.sqrt((2 / (GAMMA - 1)) * (Math.pow(qc / pressure + 1, exponent) - 1));
+/** p_t/p at Mach 1, where the subsonic and Rayleigh branches meet. */
+const SONIC_PITOT_RATIO = pitotPressureRatio(1);
+
+/**
+ * Impact (differential) pressure from Mach number [Pa], sub- or supersonic.
+ *
+ * qc = p * (p_t/p - 1). This is the compressible form. The incompressible
+ * `q = 1/2 rho V^2` is only accurate to about M 0.3; using it for CAS would put
+ * a visible error into every jet case.
+ */
+export function impactPressure(mach: number, pressure: number): number {
+  return pressure * (pitotPressureRatio(mach) - 1);
 }
 
 /**
- * TAS to CAS, subsonic.
+ * Mach number from impact and static pressure, sub- or supersonic.
+ *
+ * The subsonic branch inverts in closed form. The Rayleigh branch does not, so
+ * it is solved by bisection; p_t/p rises monotonically with Mach, so bisection
+ * cannot miss, and 100 halvings of [1, 100] reach the last bit of a double.
+ */
+export function machFromImpactPressure(qc: number, pressure: number): number {
+  const ratio = qc / pressure + 1;
+  if (ratio <= SONIC_PITOT_RATIO) {
+    const exponent = (GAMMA - 1) / GAMMA;
+    return Math.sqrt((2 / (GAMMA - 1)) * (Math.pow(ratio, exponent) - 1));
+  }
+  let low = 1;
+  let high = 100;
+  for (let i = 0; i < 100 && high - low > 1e-15 * high; i++) {
+    const mid = 0.5 * (low + high);
+    if (pitotPressureRatio(mid) < ratio) low = mid;
+    else high = mid;
+  }
+  return 0.5 * (low + high);
+}
+
+/**
+ * TAS to CAS.
  *
  * The airspeed indicator senses impact pressure and converts it using sea-level
  * standard constants. So: get qc from the real flight condition, then ask what
- * speed that qc would represent at sea level.
+ * speed that qc would represent at sea level. Both steps switch to the Rayleigh
+ * pitot formula above Mach 1.
  */
 export function tasToCas(tas: number, pressure: number, speedOfSound: number): number {
   const mach = tas / speedOfSound;
@@ -80,7 +124,7 @@ export function tasToCas(tas: number, pressure: number, speedOfSound: number): n
   return machAtSeaLevel * A0;
 }
 
-/** CAS to TAS, subsonic. Inverse of {@link tasToCas}. */
+/** CAS to TAS. Inverse of {@link tasToCas}. */
 export function casToTas(cas: number, pressure: number, speedOfSound: number): number {
   const machAtSeaLevel = cas / A0;
   const qc = impactPressure(machAtSeaLevel, P0);

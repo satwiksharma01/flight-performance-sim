@@ -78,8 +78,9 @@ run 2,000 random aircraft and 3,000 hostile links through the explorer.
 the standards rather than translated from the TypeScript: ISA integrated layer by
 layer, CAS by root-solving the pitot relation, and the characteristic speeds by
 numerical minimisation. Atmosphere and airspeeds agree to 1e-16, CAS to 1e-8 and the
-speeds to 1e-8. It also found the one known gap: above Mach 1, CAS still uses the
-subsonic pitot relation instead of Rayleigh's, off by up to 6 %.
+speeds to 1e-8. It also caught CAS above Mach 1 using the subsonic pitot relation
+instead of Rayleigh's, off by up to 6 %; that is fixed, and checked against the
+NACA 1135 normal-shock tables.
 
 Two exact identities are pinned as tests because they catch algebra errors that
 plausible-looking numbers would hide: every characteristic speed is altitude-invariant

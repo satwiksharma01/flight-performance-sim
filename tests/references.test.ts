@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { geometricAltitude, isa } from '../src/physics/atmosphere.js';
-import { tasToCas } from '../src/physics/airspeed.js';
+import { pitotPressureRatio, tasToCas } from '../src/physics/airspeed.js';
 import { maxLiftToDrag, minimumDrag, type Aircraft } from '../src/physics/aero.js';
 
 const LB = 0.45359237;
@@ -68,9 +68,14 @@ describe('airline figures', () => {
   });
 });
 
-describe('known gaps', () => {
-  // Found by the independent Python cross-check on 2026-10-02: above Mach 1 the
-  // pitot sees a normal shock, and qc follows the Rayleigh formula. tasToCas
-  // still uses the subsonic relation there, off by up to ~6 % at altitude.
-  it.todo('converts TAS to CAS through the Rayleigh pitot formula above Mach 1');
+describe('NACA Report 1135, normal-shock tables', () => {
+  // Above Mach 1 a pitot probe reads total pressure behind a normal shock. The
+  // tables give p02/p1 directly. Found missing by the Python cross-check on
+  // 2026-10-02: the core used the subsonic relation here, off by up to 6 %.
+  it.each([
+    [1.5, 3.413],
+    [2.0, 5.640],
+  ])('gives pitot total over static pressure at Mach %f as %f', (mach, table) => {
+    expect(pitotPressureRatio(mach)).toBeCloseTo(table, 3);
+  });
 });

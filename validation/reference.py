@@ -130,6 +130,7 @@ TOLERANCE = {
     "mu": 1e-4,           # two published forms of Sutherland's law
     "pressure alt [m]": 1e-6, "density alt [m]": 1e-6,
     "CAS, M<1": 1e-8,     # root-solve precision
+    "CAS, M>=1": 1e-8,    # Rayleigh pitot branch, same precision
     "vs": 1e-12, "ldmax": 1e-8, "d60": 1e-12,
     "vmd": 1e-7, "vmp": 1e-7, "vjr": 1e-7,  # bounded-minimiser precision
 }
@@ -144,7 +145,6 @@ def main(path):
         if err > worst[name][0]:
             worst[name] = (err, where)
 
-    supersonic = []
     for row in ts["atmosphere"]:
         ref = isa(row["h"], row["d"])
         where = f"h={row['h']} m, dISA={row['d']}"
@@ -157,11 +157,8 @@ def main(path):
             w = f"{where}, TAS={s['tas']}"
             track("EAS", s["eas"], s["tas"] * math.sqrt(ref["rho"] / RHO0), w)
             track("Mach", s["mach"], s["tas"] / ref["a"], w)
-            cas = cas_from_tas(s["tas"], ref["p"], ref["a"])
-            if s["mach"] < 1:
-                track("CAS, M<1", s["cas"], cas, w)
-            else:
-                supersonic.append((abs(s["cas"] - cas) / cas, w, s["mach"]))
+            branch = "CAS, M<1" if s["mach"] < 1 else "CAS, M>=1"
+            track(branch, s["cas"], cas_from_tas(s["tas"], ref["p"], ref["a"]), f"{w}, M {s['mach']:.2f}")
 
     for row in ts["aero"]:
         ref = aero(row["ac"], row["rho"])
@@ -174,11 +171,6 @@ def main(path):
         ok = err <= TOLERANCE[name]
         failed |= not ok
         print(f"  {'ok  ' if ok else 'FAIL'} {name:17s} {err:9.2e}  (limit {TOLERANCE[name]:.0e})  {where}")
-
-    if supersonic:
-        err, where, mach = max(supersonic)
-        print(f"\nKnown gap, not failing: CAS above Mach 1 uses the subsonic relation in the TS core.")
-        print(f"  {len(supersonic)} points, worst {err:.1%} at {where} (M {mach:.2f}). See tests/references.test.ts.")
 
     print("\nReference self-check against the published USSA-1976 layer bases:")
     bases_ussa = layer_bases(R_USSA)
