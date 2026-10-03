@@ -47,7 +47,7 @@ interface FieldDef {
   readonly fromDisplay: (shown: number) => number;
 }
 
-type AircraftKey = Exclude<keyof Aircraft, 'name' | 'propulsion'>;
+export type AircraftKey = Exclude<keyof Aircraft, 'name' | 'propulsion' | 'structure'>;
 
 const identity = { toDisplay: (v: number) => v, fromDisplay: (v: number) => v };
 const N_PER_LBF = 0.45359237 * 9.80665;

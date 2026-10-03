@@ -12,6 +12,7 @@
 
 import { G0 } from './constants.js';
 import type { Propulsion } from './propulsion.js';
+import type { StructuralLimits } from './performance/vn.js';
 
 export interface Aircraft {
   readonly name: string;
@@ -29,8 +30,12 @@ export interface Aircraft {
   readonly clMax: number;
   /** Maximum lift coefficient, full flap [-] */
   readonly clMaxFlaps?: number;
+  /** Maximum lift coefficient, takeoff flap [-]. Absent: takeoff is flown clean */
+  readonly clMaxTakeoff?: number;
   /** The engine, or absent for a glider */
   readonly propulsion?: Propulsion;
+  /** Limit load factors and design speeds, for the V-n diagram. Absent: none drawn */
+  readonly structure?: StructuralLimits;
 }
 
 /** Weight [N]. */
@@ -217,7 +222,7 @@ export function maxClHalfOverCd(aircraft: Aircraft): number {
   return Math.sqrt(cl) / cdFromCl(cl, aircraft.cd0, kf);
 }
 
-type LimitedField = keyof Omit<Aircraft, 'name' | 'propulsion'>;
+type LimitedField = keyof Omit<Aircraft, 'name' | 'propulsion' | 'structure'>;
 
 /**
  * Supported parameter ranges, inclusive.
@@ -235,6 +240,7 @@ export const AIRCRAFT_LIMITS: Record<LimitedField, { readonly label: string; rea
   cd0: { label: 'CD0', min: 1e-4, max: 0.5 },
   clMax: { label: 'CLmax', min: 0.05, max: 5 },
   clMaxFlaps: { label: 'CLmax with flaps', min: 0.05, max: 6 },
+  clMaxTakeoff: { label: 'CLmax, takeoff flap', min: 0.05, max: 6 },
 };
 
 /** Validate an aircraft definition, returning one human-readable problem per bad field. */

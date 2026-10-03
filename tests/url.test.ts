@@ -232,3 +232,59 @@ describe('operating weight and load factor', () => {
     expect(decodeScenario('n=11').problems).toHaveLength(1);
   });
 });
+
+describe('structural limits, takeoff flap and runway', () => {
+  const custom: Scenario = {
+    ...DEFAULT_SCENARIO,
+    presetId: null,
+    aircraft: {
+      ...CESSNA_172S,
+      name: 'Utility 172',
+      // Utility category at 2,200 lb: V_C 126 kt and V_D 178 kt, to the URL's eight figures.
+      structure: { nPositive: 4.4, nNegative: -1.76, cruiseSpeed: 64.82, diveSpeed: 91.45679, clMin: -1 },
+    },
+  };
+
+  it('writes structural limits whole when any differs, and reads them back', () => {
+    const query = encodeScenario({ ...custom, presetId: 'c172' });
+    for (const key of ['nmax', 'nmin', 'vc', 'vd', 'clneg']) expect(query).toContain(`${key}=`);
+    const { scenario, problems } = decodeScenario(query);
+    expect(problems).toEqual([]);
+    expect(scenario.aircraft.structure).toEqual(custom.aircraft.structure);
+  });
+
+  it('removes a preset’s limits with str=none, and its takeoff flap with clto=none', () => {
+    const { scenario, problems } = decodeScenario('ac=c172&str=none&clto=none');
+    expect(problems).toEqual([]);
+    expect(scenario.aircraft.structure).toBeUndefined();
+    expect(scenario.aircraft.clMaxTakeoff).toBeUndefined();
+    expect(scenario.presetId).toBeNull();
+  });
+
+  it('round-trips a custom aircraft without limits or takeoff flap', () => {
+    const { structure: _s, clMaxTakeoff: _t, clMaxFlaps: _f, ...bare } = CESSNA_172S;
+    const scenario: Scenario = {
+      ...DEFAULT_SCENARIO,
+      presetId: null,
+      aircraft: { ...bare, name: 'Bare', mass: 1150, wingArea: 16.2, propulsion: { kind: 'turbofan', thrust: 3000, lapseExponent: 0.8 } },
+    };
+    const decoded = decodeScenario(encodeScenario(scenario));
+    expect(decoded.problems).toEqual([]);
+    expect(decoded.scenario).toEqual(scenario);
+  });
+
+  it('refuses partial limits for an aircraft that has none, and a dive speed below cruise', () => {
+    expect(decodeScenario('ac=jet-trainer&str=none&nmax=4').problems).toHaveLength(1);
+    expect(decodeScenario('ac=sailplane&vd=20').problems).toHaveLength(1);
+    expect(decodeScenario('ac=sailplane&vd=20').scenario.aircraft.structure).toEqual(GENERIC_SAILPLANE.structure);
+  });
+
+  it('keeps the runway surface and wind, and drops the defaults', () => {
+    const scenario: Scenario = { ...DEFAULT_SCENARIO, surface: 'soft-turf', headwind: -2.5 };
+    expect(encodeScenario(scenario)).toBe('ac=c172&rw=soft-turf&hw=-2.5');
+    expect(decodeScenario('ac=c172&rw=soft-turf&hw=-2.5').scenario).toEqual(scenario);
+    expect(encodeScenario({ ...DEFAULT_SCENARIO, surface: 'dry-paved', headwind: 0 })).toBe('ac=c172');
+    expect(decodeScenario('rw=lava').problems).toHaveLength(1);
+    expect(decodeScenario('hw=99').problems).toHaveLength(1);
+  });
+});

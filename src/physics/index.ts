@@ -16,3 +16,6 @@ export * from './performance/curves.js';
 export * from './performance/turn.js';
 export * from './performance/climb.js';
 export * from './performance/glide.js';
+export * from './performance/vn.js';
+export * from './performance/energy.js';
+export * from './performance/field.js';

@@ -25,6 +25,8 @@ import {
   type Propulsion,
 } from '../physics/propulsion.js';
 import { ISA_CEILING } from '../physics/constants.js';
+import { STRUCTURE_LIMITS, validateStructure, type StructuralLimits } from '../physics/performance/vn.js';
+import { isSurfaceId, type SurfaceId } from '../physics/performance/field.js';
 import { CESSNA_172S, PRESET_IDS, getPreset } from '../data/aircraft/presets.js';
 
 export interface Scenario {
@@ -44,6 +46,10 @@ export interface Scenario {
   readonly mass?: number;
   /** Load factor n = L/W [-]: 1/cos(bank) in a level turn. Absent means 1 g. */
   readonly loadFactor?: number;
+  /** Runway surface for takeoff and landing. Absent means dry pavement. */
+  readonly surface?: SurfaceId;
+  /** Headwind component on the runway [m/s], negative for a tailwind. Absent means calm. */
+  readonly headwind?: number;
 }
 
 /** What the aircraft weighs in this scenario [kg]. */
@@ -54,6 +60,16 @@ export function operatingMass(scenario: Scenario): number {
 /** The scenario's load factor [-]. */
 export function loadFactorOf(scenario: Scenario): number {
   return scenario.loadFactor ?? 1;
+}
+
+/** The scenario's runway surface. */
+export function surfaceOf(scenario: Scenario): SurfaceId {
+  return scenario.surface ?? 'dry-paved';
+}
+
+/** The scenario's headwind component [m/s]. */
+export function headwindOf(scenario: Scenario): number {
+  return scenario.headwind ?? 0;
 }
 
 export const DEFAULT_SCENARIO: Scenario = {
@@ -80,6 +96,7 @@ const KEY = {
   cd0: 'cd0',
   clMax: 'clmax',
   clMaxFlaps: 'clf',
+  clMaxTakeoff: 'clto',
   altitude: 'h',
   deltaISA: 'disa',
   tas: 'v',
@@ -93,13 +110,33 @@ const KEY = {
   criticalAltitude: 'hc',
   staticThrust: 'ts',
   zeroThrustSpeed: 'v0',
+  // Structural limits for the V-n diagram. str=none removes a preset's.
+  structure: 'str',
+  nPositive: 'nmax',
+  nNegative: 'nmin',
+  cruiseSpeed: 'vc',
+  diveSpeed: 'vd',
+  clMin: 'clneg',
+  // The runway.
+  surface: 'rw',
+  headwind: 'hw',
 } as const;
+
+/** Structural limits by their query-string key. */
+const STRUCTURE_KEYS: readonly (readonly [string, keyof StructuralLimits])[] = [
+  [KEY.nPositive, 'nPositive'],
+  [KEY.nNegative, 'nNegative'],
+  [KEY.cruiseSpeed, 'cruiseSpeed'],
+  [KEY.diveSpeed, 'diveSpeed'],
+  [KEY.clMin, 'clMin'],
+];
 
 const LIMITS = {
   altitude: { min: -1000, max: ISA_CEILING },
   deltaISA: { min: -60, max: 60 },
   tas: { min: 1, max: 1000 },
   loadFactor: { min: 1, max: 10 },
+  headwind: { min: -20, max: 40 },
 } as const;
 
 /**
@@ -148,9 +185,16 @@ function samePropulsion(a: Propulsion | undefined, b: Propulsion | undefined): b
   return [...keys].every((key) => sameNumber(fa[key], fb[key]));
 }
 
+function sameStructure(a: StructuralLimits | undefined, b: StructuralLimits | undefined): boolean {
+  if (a === undefined || b === undefined) return a === b;
+  return STRUCTURE_KEYS.every(([, field]) => sameNumber(a[field], b[field]));
+}
+
 function sameAircraft(a: Aircraft, b: Aircraft): boolean {
   return (
     samePropulsion(a.propulsion, b.propulsion) &&
+    sameStructure(a.structure, b.structure) &&
+    sameNumber(a.clMaxTakeoff, b.clMaxTakeoff) &&
     a.name === b.name &&
     sameNumber(a.mass, b.mass) &&
     sameNumber(a.wingArea, b.wingArea) &&
@@ -189,8 +233,23 @@ export function encodeScenario(scenario: Scenario): string {
   if (!base || !sameNumber(ac.clMax, base.clMax)) {
     params.set(KEY.clMax, formatNumber(ac.clMax));
   }
-  if (ac.clMaxFlaps !== undefined && (!base || !sameNumber(ac.clMaxFlaps, base.clMaxFlaps))) {
-    params.set(KEY.clMaxFlaps, formatNumber(ac.clMaxFlaps));
+  // Optional coefficients: written when they differ from what the decoder would
+  // start from (the preset, or the default aircraft), with "none" for absent.
+  const start = base ?? DEFAULT_SCENARIO.aircraft;
+  for (const [key, field] of [
+    [KEY.clMaxFlaps, 'clMaxFlaps'],
+    [KEY.clMaxTakeoff, 'clMaxTakeoff'],
+  ] as const) {
+    const value = ac[field];
+    if (!sameNumber(value, start[field])) params.set(key, value === undefined ? 'none' : formatNumber(value));
+  }
+  // Structural limits, like the engine, are written out whole when they differ.
+  if (!sameStructure(ac.structure, start.structure)) {
+    if (ac.structure === undefined) {
+      params.set(KEY.structure, 'none');
+    } else {
+      for (const [key, field] of STRUCTURE_KEYS) params.set(key, formatNumber(ac.structure[field]));
+    }
   }
   // An engine that differs from the preset's is written out whole: it's short,
   // and a partial engine would be ambiguous when the kind changes.
@@ -222,6 +281,10 @@ export function encodeScenario(scenario: Scenario): string {
   }
   if (scenario.loadFactor !== undefined && !sameNumber(scenario.loadFactor, 1)) {
     params.set(KEY.loadFactor, formatNumber(scenario.loadFactor));
+  }
+  if (scenario.surface !== undefined && scenario.surface !== 'dry-paved') params.set(KEY.surface, scenario.surface);
+  if (scenario.headwind !== undefined && !sameNumber(scenario.headwind, 0)) {
+    params.set(KEY.headwind, formatNumber(scenario.headwind));
   }
 
   return params.toString();
@@ -350,6 +413,54 @@ function readEngine(params: URLSearchParams, aircraft: Aircraft, problems: strin
   return { ...aircraft, propulsion: engine };
 }
 
+/** Structural limits: the base's, overridden key by key, removed by str=none. */
+function readStructure(params: URLSearchParams, aircraft: Aircraft, problems: string[]): Aircraft {
+  const marker = params.get(KEY.structure);
+  const values: Partial<Record<keyof StructuralLimits, number>> = {};
+  for (const [key, field] of STRUCTURE_KEYS) {
+    const { label, min, max } = STRUCTURE_LIMITS[field];
+    const value = readNumber(params, key, label, problems, { min, max });
+    if (value !== undefined) values[field] = value;
+  }
+  const given = Object.keys(values).length;
+
+  if (marker !== null && marker !== 'none') problems.push(`Unknown structure option "${marker}". Expected: none.`);
+  if (marker === 'none') {
+    if (given > 0) problems.push('Structural limits were given for an aircraft without them; ignored.');
+    const { structure: _none, ...rest } = aircraft;
+    return rest;
+  }
+  if (given === 0) return aircraft;
+
+  if (!aircraft.structure && given < STRUCTURE_KEYS.length) {
+    problems.push('Structural limits need all five values (nmax, nmin, vc, vd, clneg); ignored.');
+    return aircraft;
+  }
+  const structure = { ...aircraft.structure, ...values } as StructuralLimits;
+  const invalid = validateStructure(structure);
+  if (invalid.length > 0) {
+    problems.push(...invalid.map((p) => `${p} The structural limits were ignored.`));
+    return aircraft;
+  }
+  return { ...aircraft, structure };
+}
+
+/** An optional coefficient: a number, "none" to remove it, or absent to keep it. */
+function readOptional(
+  params: URLSearchParams,
+  key: string,
+  field: 'clMaxFlaps' | 'clMaxTakeoff',
+  aircraft: Aircraft,
+  problems: string[],
+): Aircraft {
+  if (params.get(key) === 'none') {
+    const { [field]: _removed, ...rest } = aircraft;
+    return rest;
+  }
+  const value = readNumber(params, key, AIRCRAFT_LIMITS[field].label, problems, range(field));
+  return value === undefined ? aircraft : { ...aircraft, [field]: value };
+}
+
 /** An aircraft field's supported range, rejecting zero and negatives by name. */
 function range(field: keyof typeof AIRCRAFT_LIMITS): NumberFieldOptions {
   const { min, max } = AIRCRAFT_LIMITS[field];
@@ -407,10 +518,11 @@ export function decodeScenario(query: string): DecodeResult {
   const clMax = readNumber(params, KEY.clMax, 'CLmax', problems, range('clMax'));
   if (clMax !== undefined) aircraft = { ...aircraft, clMax };
 
-  const clMaxFlaps = readNumber(params, KEY.clMaxFlaps, 'CLmax with flaps', problems, range('clMaxFlaps'));
-  if (clMaxFlaps !== undefined) aircraft = { ...aircraft, clMaxFlaps };
+  aircraft = readOptional(params, KEY.clMaxFlaps, 'clMaxFlaps', aircraft, problems);
+  aircraft = readOptional(params, KEY.clMaxTakeoff, 'clMaxTakeoff', aircraft, problems);
 
   aircraft = readEngine(params, aircraft, problems);
+  aircraft = readStructure(params, aircraft, problems);
 
   // If anything was overridden the result is no longer the preset, so the id is
   // dropped — otherwise the link would claim to be a stock aircraft that it is
@@ -434,6 +546,13 @@ export function decodeScenario(query: string): DecodeResult {
     max: aircraft.mass,
   });
   const loadFactor = readNumber(params, KEY.loadFactor, 'Load factor', problems, LIMITS.loadFactor);
+  const headwind = readNumber(params, KEY.headwind, 'Headwind', problems, LIMITS.headwind);
+  let surface: SurfaceId | undefined;
+  const rawSurface = params.get(KEY.surface);
+  if (rawSurface !== null) {
+    if (isSurfaceId(rawSurface)) surface = rawSurface;
+    else problems.push(`Unknown runway surface "${rawSurface}"; using dry pavement.`);
+  }
 
   // Catch combinations that are individually plausible but jointly invalid.
   for (const problem of validateAircraft(aircraft)) {
@@ -450,6 +569,8 @@ export function decodeScenario(query: string): DecodeResult {
       // Values equal to the defaults are dropped, so one state has one link.
       ...(operating !== undefined && !sameNumber(operating, aircraft.mass) ? { mass: operating } : {}),
       ...(loadFactor !== undefined && !sameNumber(loadFactor, 1) ? { loadFactor } : {}),
+      ...(surface !== undefined && surface !== 'dry-paved' ? { surface } : {}),
+      ...(headwind !== undefined && !sameNumber(headwind, 0) ? { headwind } : {}),
     },
     problems,
   };

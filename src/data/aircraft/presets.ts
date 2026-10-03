@@ -1,5 +1,7 @@
 import type { Aircraft } from '../../physics/aero.js';
 
+const KT = 1852 / 3600;
+
 /**
  * Representative aircraft parameters for education and demonstration.
  *
@@ -10,6 +12,7 @@ import type { Aircraft } from '../../physics/aero.js';
  * remaining parameter is fitted to exactly two published numbers:
  *
  *   CLmax, flap CLmax   53 KCAS clean and 48 KCAS full-flap stall, at 2,550 lb
+ *   takeoff CLmax       50 KCAS stall with 10° flap, the short-field setting
  *   CD0, Oswald e       best glide 68 KIAS at 9:1 (propeller windmilling)
  *   propeller line      best rate of climb 730 ft/min at 74 KIAS, sea level
  *
@@ -41,11 +44,24 @@ export const CESSNA_172S: Aircraft = {
   cd0: 0.052,
   clMax: 1.54, // fitted: 53 KCAS clean stall at 2,550 lb
   clMaxFlaps: 1.88, // fitted: 48 KCAS full-flap stall at 2,550 lb
+  clMaxTakeoff: 1.73, // fitted: 50 KCAS stall with 10° flap at 2,550 lb
   propulsion: {
     kind: 'piston',
     power: 180 * 745.699872, // Lycoming IO-360-L2A, 180 hp at 2,700 rpm
     // Fitted, with the exact climb, to the POH best rate of climb: 730 ft/min at 74 KIAS, sea level
     propeller: { staticThrust: 3035, zeroThrustSpeed: 175.9 },
+  },
+  // Normal category, POH section 2. V_C is taken as V_NO, the least 14 CFR
+  // 23.1505 allows, and V_D as V_NE / 0.9, so V_NE comes out at the published
+  // 160 KCAS. The negative-stall CL isn't published: about -1.1 for the
+  // NACA 2412 section, taken as -1.0 for the wing. At these speeds, at sea
+  // level, CAS and EAS are the same.
+  structure: {
+    nPositive: 3.8,
+    nNegative: -1.52,
+    cruiseSpeed: 126 * KT,
+    diveSpeed: (160 / 0.9) * KT,
+    clMin: -1.0,
   },
 };
 
@@ -58,9 +74,12 @@ export const GENERIC_JET_TRAINER: Aircraft = {
   cd0: 0.020,
   clMax: 1.4,
   clMaxFlaps: 1.9,
+  clMaxTakeoff: 1.6,
   // One small turbofan: thrust-to-weight 0.32 at sea level, thrust lapsing
   // with density.
   propulsion: { kind: 'turbofan', thrust: 14000, lapseExponent: 1.0 },
+  // Aerobatic-trainer limits, V_D = 1.25 V_C.
+  structure: { nPositive: 7, nNegative: -3.5, cruiseSpeed: 300 * KT, diveSpeed: 375 * KT, clMin: -0.9 },
 };
 
 export const GENERIC_SAILPLANE: Aircraft = {
@@ -71,6 +90,9 @@ export const GENERIC_SAILPLANE: Aircraft = {
   oswaldEfficiency: 0.9,
   cd0: 0.012,
   clMax: 1.5,
+  // Utility category in the manner of CS-22: V_NE 135 kt, so V_D 150 kt, with
+  // the rough-air speed as V_C.
+  structure: { nPositive: 5.3, nNegative: -2.65, cruiseSpeed: 97 * KT, diveSpeed: 150 * KT, clMin: -0.8 },
 };
 
 /**
