@@ -39,6 +39,17 @@ import {
   type FlightPoint,
   type MarkerKind,
 } from '../physics/index.js';
+import {
+  bestRateOfClimb,
+  ceilings,
+  climbAt,
+  climbPerformance,
+  isPowered,
+  maxRateOfClimb,
+  type PoweredAircraft,
+} from '../physics/performance/climb.js';
+import { bestGlide, glideAtSpeed, minimumSink, type Glide } from '../physics/performance/glide.js';
+import { lapseRatio, powerAvailable, propellerEfficiency, thrustAvailable } from '../physics/propulsion.js';
 import { loadFactorOf, operatingMass, type Scenario } from '../state/url.js';
 
 export type SpeedAxis = 'tas' | 'eas' | 'cas' | 'mach';
@@ -168,7 +179,37 @@ export interface ChartWindow {
   readonly powerMax: number;
   /** Top of the L/D chart [-] */
   readonly liftToDragMax: number;
+  /** Rate-of-climb chart range [ft/min] */
+  readonly rocMin: number;
+  readonly rocMax: number;
+  /** Right edge of the climb-versus-altitude chart [ft]; 0 for a glider */
+  readonly altitudeMaxFt: number;
 }
+
+const FPM_PER_MPS = 60 / 0.3048;
+const FT_PER_M = 1 / 0.3048;
+
+/**
+ * A small keyed cache. The window, ceilings and the climb profile don't depend
+ * on the altitude or speed sliders, but they cost hundreds of optimisations
+ * each, so they are computed once per aircraft (and weight, and ISA day).
+ */
+function keyedCache<V>(limit: number) {
+  const entries = new Map<string, V>();
+  return (key: string, make: () => V): V => {
+    const hit = entries.get(key);
+    if (hit !== undefined) return hit;
+    const value = make();
+    entries.set(key, value);
+    if (entries.size > limit) {
+      const oldest = entries.keys().next().value;
+      if (oldest !== undefined) entries.delete(oldest);
+    }
+    return value;
+  };
+}
+
+const windowCache = keyedCache<ChartWindow>(16);
 
 const NICE_STEPS = [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10];
 
@@ -189,6 +230,10 @@ export function niceCeiling(value: number): number {
  * physical speed range whichever airspeed the axis shows.
  */
 export function chartWindow(aircraft: Aircraft, view: ViewSettings): ChartWindow {
+  return windowCache(JSON.stringify([aircraft, view]), () => fitWindow(aircraft, view));
+}
+
+function fitWindow(aircraft: Aircraft, view: ViewSettings): ChartWindow {
   const seaLevel = atPressureAltitude(0, 0);
   const vStall = stallSpeed(aircraft, seaLevel.density);
   const tasMax = Math.min(
@@ -199,15 +244,129 @@ export function chartWindow(aircraft: Aircraft, view: ViewSettings): ChartWindow
   // Both curves peak at an end of the range: drag and power climb steeply
   // towards stall and grow with speed past the bucket.
   const ends = [vStall, tasMax].map((tas) => evaluatePoint(aircraft, seaLevel, tas));
-  const dragMax = Math.max(...ends.map((p) => p.drag));
-  const powerMax = Math.max(...ends.map((p) => p.powerRequired)) / 1000;
+  let dragMax = Math.max(...ends.map((p) => p.drag));
+  let powerMax = Math.max(...ends.map((p) => p.powerRequired)) / 1000;
+
+  // Full-power thrust and power must fit too, and the climb charts get their
+  // own fixed ranges: rate of climb symmetric about zero, altitude to just past
+  // the absolute ceiling. A glider's chart is its sink polar.
+  let rocMax: number;
+  let rocMin: number;
+  let altitudeMaxFt = 0;
+  if (isPowered(aircraft)) {
+    const lapse = lapseRatio(aircraft.propulsion, seaLevel);
+    for (const v of [vStall, tasMax]) {
+      dragMax = Math.max(dragMax, thrustAvailable(aircraft.propulsion, v, lapse));
+      powerMax = Math.max(powerMax, powerAvailable(aircraft.propulsion, v, lapse) / 1000);
+    }
+    rocMax = niceCeiling(Math.max(bestRateOfClimb(aircraft, seaLevel).rateOfClimb * FPM_PER_MPS, 100) * 1.15);
+    rocMin = -rocMax;
+    const absolute = ceilings(aircraft).absolute;
+    altitudeMaxFt = niceCeiling(Math.max(absolute ?? 0, 1000) * FT_PER_M * 1.1);
+  } else {
+    const sink = minimumSink(aircraft, seaLevel).sinkRate * FPM_PER_MPS;
+    rocMax = niceCeiling(sink);
+    rocMin = -niceCeiling(sink * 6);
+  }
 
   return {
     xMax: tasToAxis(tasMax, seaLevel, view),
     dragMax: niceCeiling(toForce(dragMax, view.system) * 1.05),
     powerMax: niceCeiling(toPower(powerMax, view.system) * 1.05),
     liftToDragMax: niceCeiling(maxLiftToDrag(aircraft) * 1.1),
+    rocMin,
+    rocMax,
+    altitudeMaxFt,
   };
+}
+
+/** One climb optimum, as the readouts and chart markers need it. */
+export interface ClimbMark {
+  readonly tas: number;
+  readonly x: number;
+  readonly speeds: AirspeedSet;
+  readonly rocFpm: number;
+  readonly rocSmallAngleFpm: number;
+  /** Climb angle, exact [rad] */
+  readonly gamma: number;
+}
+
+export interface ClimbSummary {
+  /** Best rate of climb */
+  readonly vy: ClimbMark;
+  /** Best angle of climb */
+  readonly vx: ClimbMark;
+  /** Maximum level speed at full power, or null if level flight is impossible */
+  readonly vmax: { readonly tas: number; readonly x: number; readonly speeds: AirspeedSet } | null;
+  /** Fraction of the engine's sea-level rating available here [-] */
+  readonly lapse: number;
+  /** Propeller efficiency at V_y [-], or null for a jet */
+  readonly propEfficiencyAtVy: number | null;
+  /** At this weight and ISA day [ft], null if out of reach */
+  readonly absoluteCeilingFt: number | null;
+  readonly serviceCeilingFt: number | null;
+  /** Best rate of climb against pressure altitude, to the absolute ceiling */
+  readonly profile: { readonly altitudesFt: readonly number[]; readonly rocFpm: readonly (number | null)[] };
+  /** At the selected speed, wings level */
+  readonly selected: { readonly rocFpm: number; readonly thrust: number; readonly powerAvailable: number };
+}
+
+export interface GlideMark {
+  readonly tas: number;
+  readonly x: number;
+  readonly speeds: AirspeedSet;
+  readonly ratio: number;
+  readonly sinkFpm: number;
+  /** Glide angle below the horizon [rad] */
+  readonly gamma: number;
+  readonly limitedByStall: boolean;
+}
+
+export interface RateOfClimbChart {
+  /** Sampled x-axis values, from the wings-level stall */
+  readonly x: readonly number[];
+  /** Full power, exact and small-angle [ft/min]; null for a glider */
+  readonly exact: readonly number[] | null;
+  readonly smallAngle: readonly number[] | null;
+  /** Power off: the sink polar, as a negative rate of climb [ft/min] */
+  readonly powerOff: readonly number[];
+  /** Wings-level stall at this weight, on the x-axis */
+  readonly stallX: number;
+}
+
+const profileCache = keyedCache<Pick<ClimbSummary, 'absoluteCeilingFt' | 'serviceCeilingFt' | 'profile'>>(16);
+
+/** Ceilings and the climb-versus-altitude curve: independent of altitude and speed. */
+function climbProfile(aircraft: PoweredAircraft, deltaISA: number, altitudeMaxFt: number) {
+  return profileCache(JSON.stringify([aircraft, deltaISA, altitudeMaxFt]), () => {
+    const c = ceilings(aircraft, deltaISA);
+    const altitudesFt: number[] = [];
+    const rocFpm: (number | null)[] = [];
+    const steps = 48;
+    let reached = false;
+    for (let i = 0; i <= steps; i++) {
+      const ft = (altitudeMaxFt * i) / steps;
+      altitudesFt.push(ft);
+      if (reached) {
+        rocFpm.push(null);
+        continue;
+      }
+      const roc = maxRateOfClimb(aircraft, ft / FT_PER_M, deltaISA) * FPM_PER_MPS;
+      if (roc < 0) {
+        // End the line exactly at the absolute ceiling rather than one step past it.
+        rocFpm.push(c.absolute === null ? null : 0);
+        if (c.absolute !== null) altitudesFt[i] = c.absolute * FT_PER_M;
+        reached = true;
+      } else {
+        rocFpm.push(roc);
+      }
+    }
+    return {
+      absoluteCeilingFt: c.absolute === null ? null : c.absolute * FT_PER_M,
+      serviceCeilingFt: c.service === null ? null : c.service * FT_PER_M,
+      profile: { altitudesFt, rocFpm },
+    };
+  });
 }
 
 export interface MarkerView {
@@ -262,6 +421,18 @@ export interface ChartModel {
   readonly flapStall: { readonly tas: number; readonly speeds: AirspeedSet } | null;
   /** Why the chart is empty, in plain language, or null when it is not */
   readonly emptyReason: string | null;
+  /** Full-power thrust and power along x, in the display units; null for a glider */
+  readonly available: { readonly thrust: readonly number[]; readonly power: readonly number[] } | null;
+  readonly rateOfClimb: RateOfClimbChart;
+  /** Climb at full power, wings level, at this weight. Null for a glider */
+  readonly climb: ClimbSummary | null;
+  /** Power-off glide at this weight */
+  readonly glide: {
+    readonly best: GlideMark;
+    readonly minSink: GlideMark;
+    /** Still-air distance from this pressure altitude down to sea level [m] */
+    readonly distanceToSeaLevel: number;
+  };
 }
 
 const SAMPLE_COUNT = 200;
@@ -327,6 +498,76 @@ export function buildChartModel(scenario: Scenario, view: ViewSettings): ChartMo
   const onsetTas = COMPRESSIBILITY_ONSET * a;
   const onsetX = tasToAxis(onsetTas, atmosphere, view);
 
+  // --- Climb and glide: full power or none, wings level, at this weight ---
+  const powered = isPowered(aircraft) ? aircraft : null;
+  const lapse = powered ? lapseRatio(powered.propulsion, atmosphere) : 0;
+  const available = powered
+    ? {
+        thrust: (generatedTas(x, atmosphere, view)).map((v) => toForce(thrustAvailable(powered.propulsion, v, lapse), view.system)),
+        power: (generatedTas(x, atmosphere, view)).map((v) =>
+          toPower(powerAvailable(powered.propulsion, v, lapse) / 1000, view.system),
+        ),
+      }
+    : null;
+
+  const vStall1g = stallSpeed(aircraft, atmosphere.density);
+  const rocX: number[] = [];
+  const exact: number[] = [];
+  const smallAngle: number[] = [];
+  const powerOff: number[] = [];
+  if (vStall1g < maxTas) {
+    const count = 120;
+    for (let i = 0; i < count; i++) {
+      const v = vStall1g + ((maxTas - vStall1g) * i) / (count - 1);
+      rocX.push(tasToAxis(v, atmosphere, view));
+      powerOff.push(-glideAtSpeed(aircraft, atmosphere, v).sinkRate * FPM_PER_MPS);
+      if (powered) {
+        const c = climbAt(powered, atmosphere, v, lapse);
+        exact.push(c.rateOfClimb * FPM_PER_MPS);
+        smallAngle.push(c.rateOfClimbSmallAngle * FPM_PER_MPS);
+      }
+    }
+  }
+
+  const speedsAt = (v: number) => airspeeds(v, atmosphere.pressure, atmosphere.density, atmosphere.speedOfSound);
+  const mark = (c: { tas: number; rateOfClimb: number; rateOfClimbSmallAngle: number; gamma: number }): ClimbMark => ({
+    tas: c.tas,
+    x: tasToAxis(c.tas, atmosphere, view),
+    speeds: speedsAt(c.tas),
+    rocFpm: c.rateOfClimb * FPM_PER_MPS,
+    rocSmallAngleFpm: c.rateOfClimbSmallAngle * FPM_PER_MPS,
+    gamma: c.gamma,
+  });
+
+  let climb: ClimbSummary | null = null;
+  if (powered) {
+    const perf = climbPerformance(powered, atmosphere);
+    const at = climbAt(powered, atmosphere, scenario.tas, lapse);
+    climb = {
+      vy: mark(perf.vy),
+      vx: mark(perf.vx),
+      vmax:
+        perf.maxLevelSpeed === null
+          ? null
+          : { tas: perf.maxLevelSpeed, x: tasToAxis(perf.maxLevelSpeed, atmosphere, view), speeds: speedsAt(perf.maxLevelSpeed) },
+      lapse,
+      propEfficiencyAtVy: propellerEfficiency(powered.propulsion, perf.vy.tas),
+      ...climbProfile(powered, scenario.deltaISA, window.altitudeMaxFt),
+      selected: { rocFpm: at.rateOfClimb * FPM_PER_MPS, thrust: at.thrust, powerAvailable: (at.thrust * scenario.tas) / 1000 },
+    };
+  }
+
+  const glideMark = (g: Glide): GlideMark => ({
+    tas: g.tas,
+    x: tasToAxis(g.tas, atmosphere, view),
+    speeds: speedsAt(g.tas),
+    ratio: g.glideRatio,
+    sinkFpm: g.sinkRate * FPM_PER_MPS,
+    gamma: g.gamma,
+    limitedByStall: g.limitedByStall,
+  });
+  const best = bestGlide(aircraft, atmosphere);
+
   return {
     atmosphere,
     window,
@@ -357,5 +598,24 @@ export function buildChartModel(scenario: Scenario, view: ViewSettings): ChartMo
             speeds: airspeeds(flapStallTas, atmosphere.pressure, atmosphere.density, atmosphere.speedOfSound),
           },
     emptyReason,
+    available,
+    rateOfClimb: {
+      x: rocX,
+      exact: powered ? exact : null,
+      smallAngle: powered ? smallAngle : null,
+      powerOff,
+      stallX: tasToAxis(vStall1g, atmosphere, view),
+    },
+    climb,
+    glide: {
+      best: glideMark(best),
+      minSink: glideMark(minimumSink(aircraft, atmosphere)),
+      distanceToSeaLevel: Math.max(0, scenario.altitude) * best.glideRatio,
+    },
   };
+}
+
+/** True airspeeds behind a sampled x-axis, for quantities that need TAS. */
+function generatedTas(x: readonly number[], atmosphere: AtmosphereState, view: ViewSettings): number[] {
+  return x.map((value) => axisToTas(value, atmosphere, view));
 }

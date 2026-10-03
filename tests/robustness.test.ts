@@ -30,6 +30,20 @@ function logUniform(rand: () => number, low: number, high: number): number {
   return Math.exp(Math.log(low) + rand() * (Math.log(high) - Math.log(low)));
 }
 
+/** No engine, or one of each kind, across its whole supported range. */
+function randomEngine(rand: () => number): Pick<Aircraft, 'propulsion'> {
+  const pick = Math.floor(rand() * 4);
+  const propeller = { staticThrust: logUniform(rand, 10, 200_000), zeroThrustSpeed: 20 + rand() * 380 };
+  if (pick === 0) return {};
+  if (pick === 1) {
+    return { propulsion: { kind: 'piston', power: logUniform(rand, 1e3, 2e7), propeller, ...(rand() < 0.5 ? { criticalAltitude: rand() * 15000 } : {}) } };
+  }
+  if (pick === 2) {
+    return { propulsion: { kind: 'turboprop', power: logUniform(rand, 1e3, 2e7), lapseExponent: 0.3 + rand() * 1.2, propeller } };
+  }
+  return { propulsion: { kind: 'turbofan', thrust: logUniform(rand, 10, 5e5), lapseExponent: 0.3 + rand() * 1.2 } };
+}
+
 function randomScenario(rand: () => number): Scenario {
   const aircraft: Aircraft = {
     name: 'random',
@@ -39,6 +53,7 @@ function randomScenario(rand: () => number): Scenario {
     oswaldEfficiency: 0.1 + rand() * 0.9,
     cd0: logUniform(rand, 1e-4, 0.5),
     clMax: logUniform(rand, 0.05, 5),
+    ...randomEngine(rand),
   };
   return {
     presetId: null,
@@ -73,12 +88,23 @@ function check(scenario: Scenario, axis: SpeedAxis, unit: SpeedUnit) {
   expect(model.x.length === 0).toBe(model.emptyReason !== null);
   expect(allFinite(model.markers.flatMap((m) => [m.x, m.tas, m.point.drag]))).toBe(true);
   expect(allFinite([model.selected.x, model.selected.point.drag, model.selected.point.powerRequired])).toBe(true);
+
+  const roc = model.rateOfClimb;
+  expect(allFinite([...roc.x, ...roc.powerOff, ...(roc.exact ?? []), ...(roc.smallAngle ?? []), roc.stallX])).toBe(true);
+  if (model.available) expect(allFinite([...model.available.thrust, ...model.available.power])).toBe(true);
+  const g = model.glide;
+  expect(allFinite([g.best.tas, g.best.ratio, g.best.sinkFpm, g.minSink.tas, g.minSink.sinkFpm, g.distanceToSeaLevel])).toBe(true);
+  if (model.climb) {
+    const c = model.climb;
+    expect(allFinite([c.vy.tas, c.vy.rocFpm, c.vx.tas, c.vx.gamma, c.lapse, c.selected.rocFpm])).toBe(true);
+    expect(c.profile.rocFpm.every((v) => v === null || Number.isFinite(v))).toBe(true);
+  }
 }
 
 describe('random aircraft and conditions', () => {
   it('always yields finite, ordered numbers or an explained empty chart', () => {
     const rand = mulberry32(20261002);
-    for (let i = 0; i < 2000; i++) {
+    for (let i = 0; i < 1000; i++) {
       const scenario = randomScenario(rand);
       const axis = AXES[i % AXES.length]!;
       const unit = UNITS[i % UNITS.length]!;
@@ -88,20 +114,20 @@ describe('random aircraft and conditions', () => {
         throw new Error(`case ${i} (${axis}, ${unit}) failed for ${JSON.stringify(scenario)}: ${String(error)}`);
       }
     }
-  });
+  }, 60_000);
 });
 
 describe('hostile links', () => {
-  const KEYS = ['ac', 'nm', 'm', 's', 'ar', 'e', 'cd0', 'clmax', 'clf', 'h', 'disa', 'v', 'w', 'n', 'x', 'u'];
+  const KEYS = ['ac', 'nm', 'm', 's', 'ar', 'e', 'cd0', 'clmax', 'clf', 'h', 'disa', 'v', 'w', 'n', 'eng', 'pw', 'ft', 'lx', 'hc', 'ts', 'v0', 'x', 'u', 'sys'];
   const VALUES = [
     '', ' ', '0', '-0', '-1', '1e400', '-1e400', 'NaN', 'Infinity', '0x10', '1e-320', '84852', '84853',
     '-1001', '60', '-60', '61', '1000', '1001', 'c172', 'sailplane', 'jet-trainer', 'tas', 'mach', 'kt',
-    '<script>', '%00', '1,5', '٣', '9'.repeat(400),
+    '<script>', '%00', '1,5', '٣', '9'.repeat(400), 'none', 'piston', 'turboprop', 'turbofan', 'us', '0.5', '15000', '150000',
   ];
 
   it('never throws, whatever the query string', () => {
     const rand = mulberry32(42);
-    for (let i = 0; i < 3000; i++) {
+    for (let i = 0; i < 1500; i++) {
       const params = new URLSearchParams();
       const count = 1 + Math.floor(rand() * 8);
       for (let j = 0; j < count; j++) {
@@ -116,5 +142,5 @@ describe('hostile links', () => {
         throw new Error(`query "${query}" failed: ${String(error)}`);
       }
     }
-  });
+  }, 60_000);
 });

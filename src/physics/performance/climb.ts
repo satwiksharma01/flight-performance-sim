@@ -153,7 +153,7 @@ export function climbPerformance(aircraft: PoweredAircraft, atmosphere: Atmosphe
   const top = 8 * Math.max(vMinDrag(aircraft, atmosphere.density), vs);
 
   const at = (v: number) => climbAt(aircraft, atmosphere, v, lapse);
-  const vy = at(maximise((v) => at(v).rateOfClimb, vs, top));
+  const vy = bestRateOfClimb(aircraft, atmosphere);
   const vx = at(maximise((v) => at(v).gamma, vs, top));
 
   // Level flight is possible wherever thrust covers level drag. The fastest
@@ -173,9 +173,21 @@ export interface Ceilings {
   readonly service: number | null;
 }
 
+/**
+ * Best rate of climb here [m/s]: V_y alone, without V_x or V_max. The cheap
+ * path for sweeps through altitude and for ceilings.
+ */
+export function bestRateOfClimb(aircraft: PoweredAircraft, atmosphere: AtmosphereState): ClimbPoint {
+  const lapse = lapseRatio(aircraft.propulsion, atmosphere);
+  const vs = stallSpeed(aircraft, atmosphere.density);
+  const top = 8 * Math.max(vMinDrag(aircraft, atmosphere.density), vs);
+  const at = (v: number) => climbAt(aircraft, atmosphere, v, lapse);
+  return at(maximise((v) => at(v).rateOfClimb, vs, top));
+}
+
 /** Best rate of climb at a pressure altitude [m/s], at this ISA deviation. */
 export function maxRateOfClimb(aircraft: PoweredAircraft, pressureAltitude: number, deltaISA = 0): number {
-  return climbPerformance(aircraft, atPressureAltitude(pressureAltitude, deltaISA)).vy.rateOfClimb;
+  return bestRateOfClimb(aircraft, atPressureAltitude(pressureAltitude, deltaISA)).rateOfClimb;
 }
 
 /** Search band for ceilings: from below sea level to 30 km [m, pressure altitude]. */

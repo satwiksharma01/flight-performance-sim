@@ -37,6 +37,28 @@ export function glideAtCl(aircraft: Aircraft, atmosphere: AtmosphereState, cl: n
   return { cl, tas, gamma, glideRatio: cl / cd, sinkRate: tas * Math.sin(gamma) };
 }
 
+/**
+ * The steady glide at one airspeed: power off, so sin(gamma) = D / W with the
+ * wing carrying W cos(gamma). Solved by the same fixed-point iteration as the
+ * climb. Plotted against speed, the sink rate is the glider's polar.
+ */
+export function glideAtSpeed(aircraft: Aircraft, atmosphere: AtmosphereState, tas: number): GlidePoint {
+  const w = weight(aircraft.mass);
+  const q = 0.5 * atmosphere.density * tas * tas;
+  const kFactor = k(aircraft);
+  let sin = 0;
+  let cl = 0;
+  for (let i = 0; i < 100; i++) {
+    cl = (w * Math.sqrt(1 - sin * sin)) / (q * aircraft.wingArea);
+    const next = Math.min(1, (q * aircraft.wingArea * (aircraft.cd0 + kFactor * cl * cl)) / w);
+    const converged = Math.abs(next - sin) < 1e-14;
+    sin = next;
+    if (converged) break;
+  }
+  const gamma = Math.asin(sin);
+  return { cl, tas, gamma, glideRatio: 1 / Math.tan(gamma), sinkRate: tas * sin };
+}
+
 const GOLDEN = (Math.sqrt(5) - 1) / 2;
 
 /** Golden-section search for the minimum of a unimodal function on [a, b]. */

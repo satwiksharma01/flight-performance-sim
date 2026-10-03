@@ -234,3 +234,44 @@ describe('unit system', () => {
     expect(toMass(CESSNA_172S.mass, 'us')).toBeCloseTo(2550, 9);
   });
 });
+
+describe('climb and glide in the chart model', () => {
+  const c172 = buildChartModel(scenario({}), view('tas'));
+
+  it('peaks the rate-of-climb curve at the V_y readout', () => {
+    const peak = Math.max(...c172.rateOfClimb.exact!);
+    expect(peak).toBeLessThanOrEqual(c172.climb!.vy.rocFpm + 1e-6);
+    expect(peak / c172.climb!.vy.rocFpm).toBeCloseTo(1, 3);
+  });
+
+  it('shows the power-off sink polar below zero everywhere', () => {
+    expect(c172.rateOfClimb.powerOff.every((v) => v < 0)).toBe(true);
+  });
+
+  it('ends the climb profile at the absolute ceiling', () => {
+    const { altitudesFt, rocFpm } = c172.climb!.profile;
+    const last = rocFpm.findLastIndex((v) => v !== null);
+    expect(rocFpm[last]).toBe(0);
+    expect(altitudesFt[last]).toBeCloseTo(c172.climb!.absoluteCeilingFt!, 6);
+  });
+
+  it('gives a glider its sink polar and no climb', () => {
+    const glider = buildChartModel(scenario({ presetId: 'sailplane', aircraft: GENERIC_SAILPLANE }), view('tas'));
+    expect(glider.climb).toBeNull();
+    expect(glider.rateOfClimb.exact).toBeNull();
+    expect(glider.rateOfClimb.powerOff.length).toBeGreaterThan(0);
+    expect(glider.window.rocMin).toBeLessThan(0);
+  });
+
+  it('lowers the ceilings for a hot day and raises them for a light aircraft', () => {
+    const hot = buildChartModel(scenario({ deltaISA: 20 }), view('tas'));
+    const light = buildChartModel(scenario({ mass: 0.85 * CESSNA_172S.mass }), view('tas'));
+    expect(hot.climb!.serviceCeilingFt!).toBeLessThan(c172.climb!.serviceCeilingFt!);
+    expect(light.climb!.serviceCeilingFt!).toBeGreaterThan(c172.climb!.serviceCeilingFt!);
+  });
+
+  it('measures glide distance from this altitude as height times the glide ratio', () => {
+    const at = buildChartModel(scenario({ altitude: 3048 }), view('tas'));
+    expect(at.glide.distanceToSeaLevel).toBeCloseTo(3048 * at.glide.best.ratio, 6);
+  });
+});
