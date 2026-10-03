@@ -346,7 +346,8 @@ curve move. A complete product at a tiny scope.
 
 ### v0.5 — Envelope and maneuver *(the "wow" release)*
 - [ ] V-n diagram
-- [ ] Turn performance
+- [~] Turn performance — *bank angle, load factor, radius and rate at the selected
+      speed (`performance/turn.ts`); no turn-rate chart or doghouse plot yet*
 - [ ] Ps contours + flight envelope boundary (Web Worker)
 - [ ] Takeoff / landing ground roll + density altitude effects
 

@@ -8,24 +8,34 @@ independent Python implementation and manufacturer performance data.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/explorer-dark.png">
-  <img alt="The explorer showing a Cessna 172S at 8,000 ft on an ISA +15 day: density altitude 9,718 ft, and drag, power and L/D curves against true airspeed with V_s, V_mp, V_md and V_jr marked." src="docs/explorer-light.png">
+  <img alt="The explorer showing a Cessna 172S at 8,000 ft pressure altitude on an ISA +15 day: density altitude 9,721 ft, controls for pressure altitude, ISA deviation or OAT, weight and bank angle, and drag, power and L/D curves against true airspeed with V_s, V_mp, V_md and V_jr marked." src="docs/explorer-light.png">
 </picture>
 
-**Status:** v0.2. The physics core and the curve explorer are complete and tested;
-the site is not deployed yet. See [ROADMAP.md](ROADMAP.md).
+**Status:** v0.2. The physics core and the curve explorer are complete, tested and
+independently cross-checked; the site is not deployed yet. See [ROADMAP.md](ROADMAP.md).
 
 ## What it shows
 
 - **Drag** (total, parasite, induced), **power required** and **L/D** against speed,
   with `V_s`, `V_mp`, `V_md` and `V_jr` marked. Click or drag on any chart to read
   off a point.
-- **The speed axis in TAS, EAS, CAS or Mach**, in knots, m/s or km/h.
-- **Altitude and ISA temperature deviation**, with density altitude as a headline
-  number.
-- **Three presets** (Cessna 172S, a jet trainer, a sailplane) and an editor for
-  mass, wing area, aspect ratio, Oswald efficiency, CD₀ and CLmax.
+- **The speed axis in TAS, EAS, CAS or Mach**, in knots, m/s or km/h. CAS is
+  compressible, with the Rayleigh pitot formula above Mach 1.
+- **The condition the way performance data states it:** pressure altitude (flight
+  levels from FL180), and ISA deviation or OAT. Density altitude is the headline
+  number, and the true altitude of the pressure level is integrated through the
+  column.
+- **Weight and bank angle.** Operating weight from 40 % of max takeoff mass, and a
+  bank angle that sets the load factor. Turn radius and rate at the selected speed,
+  and W/δ.
+- **Three presets** (Cessna 172S at its 2,550 lb gross weight, a jet trainer, a
+  sailplane), and an editor for max takeoff mass, wing area, aspect ratio, Oswald
+  efficiency, CD₀, CLmax and flap CLmax. The landing-flap stall speed `V_s0` is
+  listed with the others.
+- **SI or US units** for force, power, weight and area: N, kW and kg, or lbf, hp
+  and lb.
 - **Every scenario is a link.** `?ac=c172&h=2438.4&disa=15` is a Cessna at
-  8,000 ft on a hot day. An edited preset stays short: `?ac=c172&cd0=0.03`.
+  8,000 ft on an ISA +15 day. An edited preset stays short: `?ac=c172&cd0=0.03`.
 
 ### Things to try
 
@@ -38,13 +48,16 @@ the site is not deployed yet. See [ROADMAP.md](ROADMAP.md).
    best L/D. A propeller aircraft gets its best range at best L/D itself.
 4. **Raise CD₀ in the editor.** `(L/D)max` falls and `V_md` gets slower, as
    `V_md ∝ (k/CD₀)^¼` says it should.
+5. **Bank to 60°.** Every speed on the chart moves up by √2, and the minimum drag
+   doubles: the wing now carries twice the weight. Lighten the aircraft and watch
+   the curves move the other way, by √W.
 
 ## Running it
 
 ```bash
 npm install
 npm run dev          # the explorer, at http://localhost:5173
-npm test             # 150 tests
+npm test             # 191 tests
 npm run validate     # cross-check against the independent Python reference (needs SciPy)
 npm run typecheck
 npm run build        # static site in dist/, relative paths, any host
@@ -56,17 +69,18 @@ npm run build        # static site in dist/, relative paths, any host
 |---|---|
 | `src/physics/constants.ts` | ISA constants and the layer table, base pressures derived for continuity |
 | `src/physics/units.ts` | Branded unit types and conversions; SI internally, aviation units at the boundary |
-| `src/physics/atmosphere.ts` | Layered ISA to 84 852 m, ΔISA deviation, pressure and density altitude, Sutherland viscosity |
-| `src/physics/airspeed.ts` | TAS / EAS / CAS / Mach, compressible impact pressure |
+| `src/physics/atmosphere.ts` | Layered ISA to 84 852 m, entered by pressure altitude and ΔISA; density and true altitude, Sutherland viscosity |
+| `src/physics/airspeed.ts` | TAS / EAS / CAS / Mach; compressible impact pressure, Rayleigh pitot above Mach 1 |
 | `src/physics/aero.ts` | Parabolic drag polar, stall speed, and closed-form characteristic speeds |
-| `src/physics/performance/curves.ts` | Drag, thrust required, power required and L/D curves, with characteristic-speed markers |
+| `src/physics/performance/curves.ts` | Drag, thrust required, power required and L/D curves, with characteristic-speed markers at any load factor |
+| `src/physics/performance/turn.ts` | Level-turn load factor, radius and rate |
 | `src/data/aircraft/presets.ts` | Id-keyed preset registry — ids are part of the URL format, so treat them as append-only |
 | `src/state/url.ts` | Scenario permalinks: delta-encoded, and decoding never throws |
 | `src/app/model.ts` | Everything the charts draw, as pure functions: axis conversions, the fixed chart window, sampled curves |
 | `src/app/permalink.ts` | View settings in the URL, and delta encoding for edited presets |
 | `src/app/components/` | React controls, readouts, and the uPlot chart with its marker overlays |
 
-150 tests, covering the published ISA table at five altitudes, layer continuity,
+191 tests, covering the published ISA table at five altitudes, layer continuity,
 profile inversion, every closed-form optimum cross-checked against a brute-force
 scan, permalink round-trip stability, and the chart model's physics: the drag curve
 is identical against EAS at every altitude and slides right by `sqrt(ρ₀/ρ)` against
