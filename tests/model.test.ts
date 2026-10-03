@@ -180,3 +180,37 @@ describe('niceCeiling', () => {
     expect(niceCeiling(value)).toBeCloseTo(expected, 9);
   });
 });
+
+describe('weight and bank', () => {
+  const vmd = (m: ReturnType<typeof buildChartModel>) => m.markers.find((k) => k.kind === 'min-drag')!.tas;
+
+  it('moves the optima with the square root of weight', () => {
+    const full = buildChartModel(scenario({}), view('tas'));
+    const light = buildChartModel(scenario({ mass: 0.7 * CESSNA_172S.mass }), view('tas'));
+    expect(vmd(light) / vmd(full)).toBeCloseTo(Math.sqrt(0.7), 9);
+    expect(light.weight).toBeCloseTo(0.7 * full.weight, 9);
+  });
+
+  it('moves stall and the optima by sqrt(2) in a 60° banked turn', () => {
+    const level = buildChartModel(scenario({}), view('tas'));
+    const turning = buildChartModel(scenario({ loadFactor: 2 }), view('tas'));
+    expect(vmd(turning) / vmd(level)).toBeCloseTo(Math.SQRT2, 9);
+    expect(turning.stallX / level.stallX).toBeCloseTo(Math.SQRT2, 9);
+  });
+
+  it('keeps the window fixed, so weight and bank visibly move the curves', () => {
+    const base = buildChartModel(scenario({}), view('tas')).window;
+    expect(buildChartModel(scenario({ mass: 800, loadFactor: 1.5 }), view('tas')).window).toEqual(base);
+  });
+
+  it('gives the 172S its published 48 kt landing-flap stall at max weight', () => {
+    const model = buildChartModel(scenario({}), view('cas'));
+    expect(model.flapStall).not.toBeNull();
+    expect(model.flapStall!.speeds.cas / (1852 / 3600)).toBeCloseTo(48, 0);
+  });
+
+  it('has no flap stall for an aircraft without flaps', () => {
+    const glider = scenario({ presetId: 'sailplane', aircraft: GENERIC_SAILPLANE });
+    expect(buildChartModel(glider, view('tas')).flapStall).toBeNull();
+  });
+});

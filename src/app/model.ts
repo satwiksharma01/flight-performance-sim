@@ -19,6 +19,8 @@
  */
 
 import {
+  G0,
+  airspeeds,
   casToTas,
   easToTas,
   evaluatePoint,
@@ -37,7 +39,7 @@ import {
   type FlightPoint,
   type MarkerKind,
 } from '../physics/index.js';
-import type { Scenario } from '../state/url.js';
+import { loadFactorOf, operatingMass, type Scenario } from '../state/url.js';
 
 export type SpeedAxis = 'tas' | 'eas' | 'cas' | 'mach';
 export type SpeedUnit = 'kt' | 'mps' | 'kmh';
@@ -202,6 +204,15 @@ export interface ChartModel {
   readonly compressibilityX: number | null;
   /** (L/D)max, a property of the polar alone */
   readonly maxLiftToDrag: number;
+  /** Operating weight [N] */
+  readonly weight: number;
+  /** Load factor n [-] */
+  readonly loadFactor: number;
+  /**
+   * Stall with landing flap, at this weight and load factor, or null when the
+   * aircraft has no flap CLmax. Speeds only: the drag polar is the clean one.
+   */
+  readonly flapStall: { readonly tas: number; readonly speeds: AirspeedSet } | null;
   /** Why the chart is empty, in plain language, or null when it is not */
   readonly emptyReason: string | null;
 }
@@ -210,12 +221,15 @@ const SAMPLE_COUNT = 200;
 
 /** Everything the explorer shows for one scenario and view. */
 export function buildChartModel(scenario: Scenario, view: ViewSettings): ChartModel {
-  const { aircraft } = scenario;
+  // The window is fitted to the aircraft as designed: maximum takeoff mass, 1 g.
+  // Weight and bank then move the curves within it, like altitude does.
+  const window = chartWindow(scenario.aircraft, view);
+  const aircraft: Aircraft = { ...scenario.aircraft, mass: operatingMass(scenario) };
+  const n = loadFactorOf(scenario);
   const atmosphere = atPressureAltitude(scenario.altitude, scenario.deltaISA);
-  const window = chartWindow(aircraft, view);
   const a = atmosphere.speedOfSound;
 
-  const vStall = stallSpeed(aircraft, atmosphere.density);
+  const vStall = stallSpeed(aircraft, atmosphere.density, n);
   const machCap = MACH_LIMIT * a;
   const maxTas = Math.min(axisToTas(window.xMax, atmosphere, view), machCap);
 
@@ -229,14 +243,15 @@ export function buildChartModel(scenario: Scenario, view: ViewSettings): ChartMo
 
   if (vStall >= machCap) {
     emptyReason =
-      'At this altitude the stall speed is above Mach 0.9, where the drag polar no longer applies.';
+      'Here the stall speed is above Mach 0.9, where the drag polar no longer applies.';
   } else if (vStall >= maxTas) {
-    emptyReason = 'At this altitude the whole curve lies beyond the right edge of the chart.';
+    emptyReason = 'Here the whole curve lies beyond the right edge of the chart.';
   } else {
     const curve = generateCurve(aircraft, atmosphere, {
       points: SAMPLE_COUNT,
       minSpeed: vStall,
       maxSpeed: maxTas,
+      loadFactor: n,
     });
     for (const p of curve.points) {
       x.push(axisValue(p.speeds, view));
@@ -248,7 +263,7 @@ export function buildChartModel(scenario: Scenario, view: ViewSettings): ChartMo
     }
   }
 
-  const markers = characteristicSpeeds(aircraft, atmosphere).map((m) => ({
+  const markers = characteristicSpeeds(aircraft, atmosphere, n).map((m) => ({
     kind: m.kind,
     label: m.label,
     significance: m.significance,
@@ -259,7 +274,9 @@ export function buildChartModel(scenario: Scenario, view: ViewSettings): ChartMo
     point: m.point,
   }));
 
-  const selectedPoint = evaluatePoint(aircraft, atmosphere, scenario.tas);
+  const selectedPoint = evaluatePoint(aircraft, atmosphere, scenario.tas, n);
+  const flapStallTas =
+    aircraft.clMaxFlaps === undefined ? null : stallSpeed(aircraft, atmosphere.density, n, aircraft.clMaxFlaps);
   const onsetTas = COMPRESSIBILITY_ONSET * a;
   const onsetX = tasToAxis(onsetTas, atmosphere, view);
 
@@ -283,6 +300,15 @@ export function buildChartModel(scenario: Scenario, view: ViewSettings): ChartMo
     stallX: tasToAxis(vStall, atmosphere, view),
     compressibilityX: onsetX < window.xMax ? onsetX : null,
     maxLiftToDrag: maxLiftToDrag(aircraft),
+    weight: aircraft.mass * G0,
+    loadFactor: n,
+    flapStall:
+      flapStallTas === null
+        ? null
+        : {
+            tas: flapStallTas,
+            speeds: airspeeds(flapStallTas, atmosphere.pressure, atmosphere.density, atmosphere.speedOfSound),
+          },
     emptyReason,
   };
 }

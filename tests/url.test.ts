@@ -201,3 +201,34 @@ describe('round trips', () => {
     });
   }
 });
+
+describe('operating weight and load factor', () => {
+  it('round-trips both, and leaves them out at their defaults', () => {
+    const scenario = { ...DEFAULT_SCENARIO, mass: 950, loadFactor: 1.5 };
+    const query = encodeScenario(scenario);
+    expect(query).toBe('ac=c172&w=950&n=1.5');
+    expect(decodeScenario(query).scenario).toEqual(scenario);
+    expect(encodeScenario({ ...DEFAULT_SCENARIO, mass: CESSNA_172S.mass, loadFactor: 1 })).toBe('ac=c172');
+  });
+
+  it('drops values equal to the defaults, so one state has one link', () => {
+    const { scenario } = decodeScenario(`ac=c172&w=${CESSNA_172S.mass}&n=1`);
+    expect(scenario.mass).toBeUndefined();
+    expect(scenario.loadFactor).toBeUndefined();
+  });
+
+  it('refuses an operating weight above max takeoff mass', () => {
+    const { scenario, problems } = decodeScenario('ac=c172&w=2000');
+    expect(scenario.mass).toBeUndefined();
+    expect(problems[0]).toContain('Operating mass');
+  });
+
+  it('bounds the operating weight by an edited max takeoff mass', () => {
+    expect(decodeScenario('ac=c172&m=1500&w=1400').scenario.mass).toBe(1400);
+  });
+
+  it('refuses a load factor outside 1 to 10', () => {
+    expect(decodeScenario('n=0.5').problems).toHaveLength(1);
+    expect(decodeScenario('n=11').problems).toHaveLength(1);
+  });
+});

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { atPressureAltitude, vMinDrag, type Aircraft } from '../physics/index.js';
+import { atPressureAltitude, loadFactorForBank, vMinDrag, type Aircraft } from '../physics/index.js';
 import { PRESETS, type PresetId } from '../data/aircraft/presets.js';
 import { axisToTas, buildChartModel, type ChartModel, type ViewSettings } from './model.js';
 import { canonicalize, readPermalink, writePermalink, type Permalink } from './permalink.js';
@@ -81,14 +81,34 @@ export function App() {
       const atmosphere = atPressureAltitude(s.scenario.altitude, s.scenario.deltaISA);
       // Land the selected speed on best L/D, where the new aircraft is interesting.
       const tas = roundTas(vMinDrag(aircraft, atmosphere.density));
-      return { ...s, basePresetId: id, scenario: { ...s.scenario, presetId: id, aircraft, tas } };
+      // A new aircraft starts at its own max takeoff mass; the bank angle stays.
+      const { mass: _previousMass, ...rest } = s.scenario;
+      return { ...s, basePresetId: id, scenario: { ...rest, presetId: id, aircraft, tas } };
     });
 
-  const editAircraft = (key: keyof Aircraft, value: number) =>
-    update((s) => ({
-      ...s,
-      scenario: { ...s.scenario, presetId: null, aircraft: { ...s.scenario.aircraft, [key]: value } },
-    }));
+  /** Set an aircraft parameter, or remove an optional one (flap CLmax) with null. */
+  const editAircraft = (key: Exclude<keyof Aircraft, 'name'>, value: number | null) =>
+    update((s) => {
+      const { clMaxFlaps: _flaps, ...withoutFlaps } = s.scenario.aircraft;
+      const aircraft: Aircraft =
+        value === null ? (key === 'clMaxFlaps' ? withoutFlaps : s.scenario.aircraft) : { ...s.scenario.aircraft, [key]: value };
+      // An operating mass above a newly lowered max takeoff mass fails the
+      // permalink's check, so canonicalisation returns it to the maximum.
+      return { ...s, scenario: { ...s.scenario, presetId: null, aircraft } };
+    });
+
+  const setOperatingMass = (mass: number) =>
+    update((s) => {
+      const { mass: _previous, ...rest } = s.scenario;
+      return { ...s, scenario: mass >= s.scenario.aircraft.mass ? rest : { ...rest, mass } };
+    });
+
+  const setBank = (degrees: number) =>
+    update((s) => {
+      const { loadFactor: _previous, ...rest } = s.scenario;
+      if (degrees <= 0) return { ...s, scenario: rest };
+      return { ...s, scenario: { ...rest, loadFactor: loadFactorForBank((degrees * Math.PI) / 180) } };
+    });
 
   const pickSpeed = (x: number) =>
     update((s) => {
@@ -165,6 +185,9 @@ export function App() {
               onAltitude={(altitude) => update((s) => ({ ...s, scenario: { ...s.scenario, altitude } }))}
               onDeltaISA={(deltaISA) => update((s) => ({ ...s, scenario: { ...s.scenario, deltaISA } }))}
               onSpeed={pickSpeed}
+              maxMass={scenario.aircraft.mass}
+              onMass={setOperatingMass}
+              onBank={setBank}
             />
           )}
           <ViewPanel view={view} onChange={setView} />

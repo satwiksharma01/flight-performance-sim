@@ -46,6 +46,8 @@ function randomScenario(rand: () => number): Scenario {
     altitude: -1000 + rand() * 85_000,
     deltaISA: -60 + rand() * 120,
     tas: 1 + rand() * 999,
+    mass: aircraft.mass * (0.3 + rand() * 0.7),
+    loadFactor: 1 + rand() * 9,
   };
 }
 
@@ -90,7 +92,7 @@ describe('random aircraft and conditions', () => {
 });
 
 describe('hostile links', () => {
-  const KEYS = ['ac', 'nm', 'm', 's', 'ar', 'e', 'cd0', 'clmax', 'clf', 'h', 'disa', 'v', 'x', 'u'];
+  const KEYS = ['ac', 'nm', 'm', 's', 'ar', 'e', 'cd0', 'clmax', 'clf', 'h', 'disa', 'v', 'w', 'n', 'x', 'u'];
   const VALUES = [
     '', ' ', '0', '-0', '-1', '1e400', '-1e400', 'NaN', 'Infinity', '0x10', '1e-320', '84852', '84853',
     '-1001', '60', '-60', '61', '1000', '1001', 'c172', 'sailplane', 'jet-trainer', 'tas', 'mach', 'kt',

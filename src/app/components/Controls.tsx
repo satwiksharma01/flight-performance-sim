@@ -1,5 +1,5 @@
 import { useEffect, useId, useState, type ReactNode } from 'react';
-import { AIRCRAFT_LIMITS, type Aircraft } from '../../physics/index.js';
+import { AIRCRAFT_LIMITS, G0, bankForLoadFactor, type Aircraft } from '../../physics/index.js';
 import { PRESETS, PRESET_IDS, type PresetId } from '../../data/aircraft/presets.js';
 import type { ChartModel, SpeedAxis, SpeedUnit, ViewSettings } from '../model.js';
 import { AXIS_NAME, UNIT_NAME, axisSpeed, feet, num, signed } from '../format.js';
@@ -9,24 +9,32 @@ const FT_PER_M = 1 / 0.3048;
 // --- Aircraft ---------------------------------------------------------------
 
 interface FieldSpec {
-  readonly key: keyof Omit<Aircraft, 'name' | 'clMaxFlaps'>;
+  readonly key: Exclude<keyof Aircraft, 'name'>;
   readonly label: string;
   readonly unit?: string;
   readonly hint: string;
+  /** May be left blank: the aircraft simply doesn't have it */
+  readonly optional?: boolean;
 }
 
 const FIELDS: readonly FieldSpec[] = [
-  { key: 'mass', label: 'Mass', unit: 'kg', hint: 'Weight sets the lift the wing must make.' },
+  { key: 'mass', label: 'Max takeoff mass', unit: 'kg', hint: 'The weight slider flies anything up to this.' },
   { key: 'wingArea', label: 'Wing area', unit: 'm²', hint: 'Reference area S.' },
   { key: 'aspectRatio', label: 'Aspect ratio', hint: 'b²/S. Higher means less induced drag.' },
   { key: 'oswaldEfficiency', label: 'Oswald efficiency', hint: 'Span efficiency e.' },
   { key: 'cd0', label: 'CD₀', hint: 'Zero-lift drag coefficient.' },
   { key: 'clMax', label: 'CL max', hint: 'Clean maximum lift coefficient.' },
+  {
+    key: 'clMaxFlaps',
+    label: 'CL max, flaps',
+    hint: 'Landing-flap maximum lift coefficient. Leave blank for none.',
+    optional: true,
+  },
 ];
 
 /** The same ranges a permalink is held to, so the editor can't make a link that won't load. */
-function validate(spec: FieldSpec, raw: string): { value: number } | { error: string } {
-  if (raw.trim() === '') return { error: 'Enter a number.' };
+function validate(spec: FieldSpec, raw: string): { value: number | null } | { error: string } {
+  if (raw.trim() === '') return spec.optional ? { value: null } : { error: 'Enter a number.' };
   const value = Number(raw);
   if (!Number.isFinite(value)) return { error: 'Enter a number.' };
   const { min, max } = AIRCRAFT_LIMITS[spec.key];
@@ -43,18 +51,19 @@ function NumberField({
   onCommit,
 }: {
   spec: FieldSpec;
-  value: number;
-  onCommit: (value: number) => void;
+  value: number | undefined;
+  onCommit: (value: number | null) => void;
 }) {
   const id = useId();
-  const [draft, setDraft] = useState(String(value));
+  const [draft, setDraft] = useState(value === undefined ? '' : String(value));
   const [error, setError] = useState<string | null>(null);
 
   // Follow outside changes (a preset switch, a reset) unless the draft already
   // means the same number — otherwise typing "0.0" would be rewritten to "0".
   useEffect(() => {
-    if (Number(draft) !== value) {
-      setDraft(String(value));
+    const same = value === undefined ? draft.trim() === '' : Number(draft) === value;
+    if (!same) {
+      setDraft(value === undefined ? '' : String(value));
       setError(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -72,6 +81,7 @@ function NumberField({
         inputMode="decimal"
         autoComplete="off"
         spellCheck={false}
+        placeholder={spec.optional ? 'none' : undefined}
         value={draft}
         aria-invalid={error !== null}
         aria-describedby={error ? `${id}-error` : undefined}
@@ -106,7 +116,7 @@ export function AircraftPanel({
   presetId: string | null;
   basePresetId: string | null;
   onPreset: (id: PresetId) => void;
-  onEdit: (key: FieldSpec['key'], value: number) => void;
+  onEdit: (key: FieldSpec['key'], value: number | null) => void;
 }) {
   const id = useId();
   const modified = presetId === null;
@@ -278,6 +288,9 @@ export function ConditionPanel({
   onAltitude,
   onDeltaISA,
   onSpeed,
+  maxMass,
+  onMass,
+  onBank,
 }: {
   altitude: number;
   deltaISA: number;
@@ -286,10 +299,15 @@ export function ConditionPanel({
   onAltitude: (metres: number) => void;
   onDeltaISA: (kelvin: number) => void;
   onSpeed: (axisValue: number) => void;
+  /** Max takeoff mass [kg], the top of the weight slider */
+  maxMass: number;
+  onMass: (kg: number) => void;
+  onBank: (degrees: number) => void;
 }) {
   const id = useId();
   const altitudeFt = Math.round(altitude * FT_PER_M);
   const standardC = model.atmosphere.standardTemperature - 273.15;
+  const bankDegrees = (bankForLoadFactor(model.loadFactor) * 180) / Math.PI;
   const xMax = model.window.xMax;
 
   return (
@@ -322,6 +340,37 @@ export function ConditionPanel({
         oat={standardC + deltaISA}
         standard={standardC}
         onCommit={(oat) => onDeltaISA(Math.round((oat - standardC) * 100) / 100)}
+      />
+      <Slider
+        label="Weight"
+        value={model.weight / G0}
+        min={0.4 * maxMass}
+        max={maxMass}
+        step={maxMass / 600}
+        readout={
+          <>
+            {num(model.weight / G0)} kg{' '}
+            <span className="dim">{num((100 * model.weight) / G0 / maxMass)} % MTOW</span>
+          </>
+        }
+        onChange={(kg) => onMass(Math.round(kg * 10) / 10)}
+      />
+      <Slider
+        label="Bank angle"
+        value={bankDegrees}
+        min={0}
+        max={60}
+        step={1}
+        readout={
+          model.loadFactor === 1 ? (
+            'wings level'
+          ) : (
+            <>
+              {num(bankDegrees)}° <span className="dim">n {num(model.loadFactor, 2)}</span>
+            </>
+          )
+        }
+        onChange={onBank}
       />
       <Slider
         label="Selected speed"

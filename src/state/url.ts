@@ -30,6 +30,23 @@ export interface Scenario {
   readonly deltaISA: number;
   /** True airspeed [m/s] */
   readonly tas: number;
+  /**
+   * Operating mass [kg], up to the aircraft's `mass`, which is its maximum
+   * takeoff mass. Absent means at maximum takeoff mass, so it follows edits to it.
+   */
+  readonly mass?: number;
+  /** Load factor n = L/W [-]: 1/cos(bank) in a level turn. Absent means 1 g. */
+  readonly loadFactor?: number;
+}
+
+/** What the aircraft weighs in this scenario [kg]. */
+export function operatingMass(scenario: Scenario): number {
+  return scenario.mass ?? scenario.aircraft.mass;
+}
+
+/** The scenario's load factor [-]. */
+export function loadFactorOf(scenario: Scenario): number {
+  return scenario.loadFactor ?? 1;
 }
 
 export const DEFAULT_SCENARIO: Scenario = {
@@ -59,12 +76,15 @@ const KEY = {
   altitude: 'h',
   deltaISA: 'disa',
   tas: 'v',
+  operatingMass: 'w',
+  loadFactor: 'n',
 } as const;
 
 const LIMITS = {
   altitude: { min: -1000, max: ISA_CEILING },
   deltaISA: { min: -60, max: 60 },
   tas: { min: 1, max: 1000 },
+  loadFactor: { min: 1, max: 10 },
 } as const;
 
 /**
@@ -135,6 +155,12 @@ export function encodeScenario(scenario: Scenario): string {
   }
   if (scenario.tas !== DEFAULT_SCENARIO.tas) {
     params.set(KEY.tas, formatNumber(scenario.tas));
+  }
+  if (scenario.mass !== undefined && !sameNumber(scenario.mass, ac.mass)) {
+    params.set(KEY.operatingMass, formatNumber(scenario.mass));
+  }
+  if (scenario.loadFactor !== undefined && !sameNumber(scenario.loadFactor, 1)) {
+    params.set(KEY.loadFactor, formatNumber(scenario.loadFactor));
   }
 
   return params.toString();
@@ -263,13 +289,30 @@ export function decodeScenario(query: string): DecodeResult {
   const tas =
     readNumber(params, KEY.tas, 'True airspeed', problems, LIMITS.tas) ?? DEFAULT_SCENARIO.tas;
 
+  // Operating mass is bounded by this aircraft's maximum, so it is read last.
+  const operating = readNumber(params, KEY.operatingMass, 'Operating mass', problems, {
+    exclusiveMin: 0,
+    min: AIRCRAFT_LIMITS.mass.min,
+    max: aircraft.mass,
+  });
+  const loadFactor = readNumber(params, KEY.loadFactor, 'Load factor', problems, LIMITS.loadFactor);
+
   // Catch combinations that are individually plausible but jointly invalid.
   for (const problem of validateAircraft(aircraft)) {
     problems.push(problem);
   }
 
   return {
-    scenario: { presetId: resolvedPresetId, aircraft, altitude, deltaISA, tas },
+    scenario: {
+      presetId: resolvedPresetId,
+      aircraft,
+      altitude,
+      deltaISA,
+      tas,
+      // Values equal to the defaults are dropped, so one state has one link.
+      ...(operating !== undefined && !sameNumber(operating, aircraft.mass) ? { mass: operating } : {}),
+      ...(loadFactor !== undefined && !sameNumber(loadFactor, 1) ? { loadFactor } : {}),
+    },
     problems,
   };
 }

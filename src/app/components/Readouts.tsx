@@ -1,4 +1,4 @@
-import type { AirspeedSet } from '../../physics/index.js';
+import { G0, turnRadius, turnRate, type AirspeedSet } from '../../physics/index.js';
 import { toUnit, type ChartModel, type MarkerView, type ViewSettings } from '../model.js';
 import { UNIT_NAME, axisSpeed, feet, horsepower, mach, num, signed, speed } from '../format.js';
 
@@ -116,10 +116,30 @@ export function SpeedsTable({ model, view }: { model: ChartModel; view: ViewSett
                 <td className="n">{num(m.point.liftToDrag, 1)}</td>
               </tr>
             ))}
+            {model.flapStall && (
+              <tr title="Stall with landing flap. The drag polar here is the clean one, so flap drag, power and L/D are not shown.">
+                <th scope="row">
+                  <Sub symbol="V" sub="s0" />
+                </th>
+                <td>
+                  Stall, landing flap <span className="tag">speeds only</span>
+                </td>
+                <td className="n">{num(toUnit(model.flapStall.speeds.tas, unit), unit === 'mps' ? 1 : 0)}</td>
+                <td className="n">{num(toUnit(model.flapStall.speeds.eas, unit), unit === 'mps' ? 1 : 0)}</td>
+                <td className="n">{num(toUnit(model.flapStall.speeds.cas, unit), unit === 'mps' ? 1 : 0)}</td>
+                <td className="n">{num(model.flapStall.speeds.mach, 3)}</td>
+                <td className="n dim">–</td>
+                <td className="n dim">–</td>
+                <td className="n dim">–</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
-      <p className="card-foot">Speeds in {UNIT_NAME[unit]}.</p>
+      <p className="card-foot">
+        Speeds in {UNIT_NAME[unit]}, at {num(model.weight / G0)} kg
+        {model.loadFactor === 1 ? '' : ` and ${num(model.loadFactor, 2)} g`}. The charts show the clean configuration.
+      </p>
     </section>
   );
 }
@@ -171,6 +191,22 @@ export function SelectedPanel({ model, view }: { model: ChartModel; view: ViewSe
         </dd>
         <dt>L/D</dt>
         <dd>{num(point.liftToDrag, 2)}</dd>
+        <dt title="Weight over pressure ratio. Jet performance collapses onto W/δ and Mach.">W/δ</dt>
+        <dd>{num(model.weight / model.atmosphere.pressureRatio)} N</dd>
+        {model.loadFactor > 1 && (
+          <>
+            <dt>Turn radius</dt>
+            <dd>
+              {num(turnRadius(s.tas, model.loadFactor))} m{' '}
+              <span className="dim">{num(turnRadius(s.tas, model.loadFactor) / 1852, 2)} NM</span>
+            </dd>
+            <dt>Turn rate</dt>
+            <dd>
+              {num((turnRate(s.tas, model.loadFactor) * 180) / Math.PI, 1)} °/s{' '}
+              <span className="dim">{num(360 / ((turnRate(s.tas, model.loadFactor) * 180) / Math.PI))} s per 360°</span>
+            </dd>
+          </>
+        )}
       </dl>
     </section>
   );
