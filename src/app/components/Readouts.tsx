@@ -1,4 +1,5 @@
-import { G0, turnRadius, turnRate, type AirspeedSet } from '../../physics/index.js';
+import type { ReactNode } from 'react';
+import { G0, turnRadius, turnRate, type AirspeedSet, type Propulsion } from '../../physics/index.js';
 import { toForce, toUnit, type ChartModel, type MarkerView, type ViewSettings } from '../model.js';
 import { UNIT_NAME, axisSpeed, feet, force, length, mach, mass, num, otherPower, power, signed, speed } from '../format.js';
 
@@ -28,43 +29,91 @@ function markerSymbol(label: string) {
 
 // --- Headline tiles ---------------------------------------------------------
 
+const fpm = (value: number) => `${num(value)} ft/min`;
+const ftValue = (value: number) => `${num(value)} ft`;
+const nm = (metres: number) => `${num(metres / 1852, metres < 18520 ? 1 : 0)} NM`;
+
+function Tile({ label, value, sub }: { label: ReactNode; value: ReactNode; sub: ReactNode }) {
+  return (
+    <div className="card tile">
+      <span className="tile-label">{label}</span>
+      <span className="tile-value">{value}</span>
+      <span className="tile-sub">{sub}</span>
+    </div>
+  );
+}
+
 export function Tiles({ model, view }: { model: ChartModel; view: ViewSettings }) {
   const stall = model.markers.find((m) => m.kind === 'stall');
-  const minDrag = model.markers.find((m) => m.kind === 'min-drag');
-  const { atmosphere } = model;
+  const { atmosphere, climb, glide } = model;
 
   return (
     <div className="tiles">
-      <div className="card tile">
-        <span className="tile-label">Density altitude</span>
-        <span className="tile-value">{feet(atmosphere.densityAltitude)}</span>
-        <span className="tile-sub">
-          PA {feet(atmosphere.pressureAltitude)} · OAT {num(atmosphere.temperature - 273.15)} °C
-        </span>
-      </div>
+      <Tile
+        label="Density altitude"
+        value={feet(atmosphere.densityAltitude)}
+        sub={`PA ${feet(atmosphere.pressureAltitude)} · OAT ${num(atmosphere.temperature - 273.15)} °C`}
+      />
       {stall && (
-        <div className="card tile">
-          <span className="tile-label">
-            Stall speed, <Sub symbol="V" sub="s" />
-          </span>
-          <span className="tile-value">{axisSpeed(stall.speeds, view)}</span>
-          <span className="tile-sub">{otherSpeeds(stall.speeds, view)}</span>
-        </div>
+        <Tile
+          label={
+            <>
+              Stall speed, <Sub symbol="V" sub="s" />
+            </>
+          }
+          value={axisSpeed(stall.speeds, view)}
+          sub={otherSpeeds(stall.speeds, view)}
+        />
       )}
-      {minDrag && (
-        <div className="card tile">
-          <span className="tile-label">
-            Best glide, <Sub symbol="V" sub="md" />
-          </span>
-          <span className="tile-value">{axisSpeed(minDrag.speeds, view)}</span>
-          <span className="tile-sub">{otherSpeeds(minDrag.speeds, view)}</span>
-        </div>
+      {climb ? (
+        <>
+          <Tile
+            label={
+              <>
+                Best rate of climb, <Sub symbol="V" sub="y" />
+              </>
+            }
+            value={fpm(climb.vy.rocFpm)}
+            sub={
+              <>
+                at {axisSpeed(climb.vy.speeds, view)} · <Sub symbol="V" sub="x" /> {axisSpeed(climb.vx.speeds, view)}
+              </>
+            }
+          />
+          <Tile
+            label="Service ceiling"
+            value={climb.serviceCeilingFt === null ? 'out of reach' : ftValue(climb.serviceCeilingFt)}
+            sub={climb.absoluteCeilingFt === null ? 'at this weight and ISA day' : `absolute ${ftValue(climb.absoluteCeilingFt)}, at this weight`}
+          />
+        </>
+      ) : (
+        <>
+          <Tile label="Minimum sink" value={fpm(glide.minSink.sinkFpm)} sub={`at ${axisSpeed(glide.minSink.speeds, view)}`} />
+          <Tile label="Glide from here" value={nm(glide.distanceToSeaLevel)} sub="to sea level, still air, at best glide" />
+        </>
       )}
-      <div className="card tile">
-        <span className="tile-label">Best lift-to-drag</span>
-        <span className="tile-value">{num(model.maxLiftToDrag, 1)}</span>
-        <span className="tile-sub">Glide {num(model.maxLiftToDrag, 1)} : 1, fixed by the polar</span>
-      </div>
+      <Tile
+        label="Best glide"
+        value={`${num(glide.best.ratio, 1)} : 1`}
+        sub={`at ${axisSpeed(glide.best.speeds, view)}, sinking ${fpm(glide.best.sinkFpm)}`}
+      />
+      {climb && (
+        <Tile
+          label={
+            <>
+              Maximum level speed, <Sub symbol="V" sub="max" />
+            </>
+          }
+          value={climb.vmax ? axisSpeed(climb.vmax.speeds, view) : 'none'}
+          sub={
+            !climb.vmax
+              ? "full power can't hold altitude here"
+              : climb.vmax.beyondModel
+                ? 'past Mach 0.7: no wave drag, so optimistic'
+                : 'full power, where thrust meets drag'
+          }
+        />
+      )}
     </div>
   );
 }
@@ -211,6 +260,131 @@ export function SelectedPanel({ model, view }: { model: ChartModel; view: ViewSe
             </dd>
           </>
         )}
+      </dl>
+    </section>
+  );
+}
+
+// --- Climb -----------------------------------------------------------------
+
+function engineSummary(engine: Propulsion, system: ViewSettings['system']): string {
+  switch (engine.kind) {
+    case 'piston':
+      return `Piston${engine.criticalAltitude === undefined ? '' : ', turbocharged'}, ${power(engine.power / 1000, system)}`;
+    case 'turboprop':
+      return `Turboprop, ${power(engine.power / 1000, system)}`;
+    case 'turbofan':
+      return `Turbofan, ${force(engine.thrust, system)}`;
+  }
+}
+
+export function ClimbPanel({ model, view, engine }: { model: ChartModel; view: ViewSettings; engine: Propulsion }) {
+  const climb = model.climb;
+  if (!climb) return null;
+  const { vy, vx, vmax } = climb;
+  const delta = (vy.rocFpm - vy.rocSmallAngleFpm) / Math.abs(vy.rocSmallAngleFpm);
+  const deg = (rad: number) => (rad * 180) / Math.PI;
+
+  return (
+    <section className="card table-card" aria-labelledby="climb-h">
+      <h3 id="climb-h">Climb</h3>
+      <p className="card-sub">Full power, wings level, at {mass(model.weight / G0, view.system)}.</p>
+      <dl className="readout">
+        <dt>Engine</dt>
+        <dd>
+          {engineSummary(engine, view.system)}
+          {engine.kind !== 'turbofan' && <span className="dim"> {otherPower(engine.power / 1000, view.system)}</span>}
+        </dd>
+        <dt>Available here</dt>
+        <dd>
+          {num(climb.lapse * 100)} % <span className="dim">of sea-level {engine.kind === 'turbofan' ? 'thrust' : 'power'}</span>
+        </dd>
+        <dt>
+          Best rate, <Sub symbol="V" sub="y" />
+        </dt>
+        <dd>
+          {fpm(vy.rocFpm)} <span className="dim">at {axisSpeed(vy.speeds, view)}</span>
+        </dd>
+        <dt title="ROC = (P_A − P_R)/W assumes the wing still carries the whole weight. In a climb it carries W cos γ, so induced drag falls a little.">
+          Small-angle (P<sub>A</sub> − P<sub>R</sub>)/W
+        </dt>
+        <dd>
+          {fpm(vy.rocSmallAngleFpm)}{' '}
+          <span className="dim">exact is {signed(delta * 100, Math.abs(delta) < 0.1 ? 2 : 1)} %</span>
+        </dd>
+        <dt>
+          Best angle, <Sub symbol="V" sub="x" />
+        </dt>
+        <dd>
+          {num(deg(vx.gamma), 1)}° <span className="dim">{num(Math.tan(vx.gamma) * 100, 1)} % gradient, at {axisSpeed(vx.speeds, view)}</span>
+        </dd>
+        <dt>
+          Maximum level speed, <Sub symbol="V" sub="max" />
+        </dt>
+        <dd>
+          {vmax ? axisSpeed(vmax.speeds, view) : 'none here'}
+          {vmax?.beyondModel && <span className="tag">past M 0.7</span>}
+        </dd>
+        <dt>Service ceiling</dt>
+        <dd>
+          {climb.serviceCeilingFt === null ? 'out of reach' : ftValue(climb.serviceCeilingFt)}{' '}
+          <span className="dim">100 ft/min</span>
+        </dd>
+        <dt>Absolute ceiling</dt>
+        <dd>{climb.absoluteCeilingFt === null ? 'out of reach' : ftValue(climb.absoluteCeilingFt)}</dd>
+        {climb.serviceCeilingMach !== null && climb.serviceCeilingMach >= 0.7 && (
+          <>
+            <dt>Caution</dt>
+            <dd className="caution">
+              V<sub>y</sub> at the service ceiling is M {num(climb.serviceCeilingMach, 2)}, past where the polar holds: the
+              ceilings are optimistic.
+            </dd>
+          </>
+        )}
+        {(vy.beyondModel || vx.beyondModel) && (
+          <>
+            <dt>Caution</dt>
+            <dd className="caution">Climb speeds past Mach 0.7 here: the polar has no wave drag.</dd>
+          </>
+        )}
+        {climb.propEfficiencyAtVy !== null && (
+          <>
+            <dt title="Thrust power over shaft power at V_y, implied by the propeller model">Propeller efficiency at V_y</dt>
+            <dd>{num(climb.propEfficiencyAtVy, 2)}</dd>
+          </>
+        )}
+      </dl>
+    </section>
+  );
+}
+
+// --- Glide -----------------------------------------------------------------
+
+export function GlidePanel({ model, view }: { model: ChartModel; view: ViewSettings }) {
+  const { best, minSink, distanceToSeaLevel } = model.glide;
+  const deg = (rad: number) => (rad * 180) / Math.PI;
+  return (
+    <section className="card table-card" aria-labelledby="glide-h">
+      <h3 id="glide-h">Glide</h3>
+      <p className="card-sub">Power off, still air, at {mass(model.weight / G0, view.system)}.</p>
+      <dl className="readout">
+        <dt>Best glide ratio</dt>
+        <dd>
+          {num(best.ratio, 1)} : 1 <span className="dim">{num(deg(best.gamma), 1)}° below the horizon</span>
+        </dd>
+        <dt>Best glide speed</dt>
+        <dd>
+          {axisSpeed(best.speeds, view)} <span className="dim">sinking {fpm(best.sinkFpm)}</span>
+        </dd>
+        <dt>Minimum sink</dt>
+        <dd>
+          {fpm(minSink.sinkFpm)} <span className="dim">at {axisSpeed(minSink.speeds, view)}</span>
+          {minSink.limitedByStall && <span className="tag">at the stall</span>}
+        </dd>
+        <dt>From this altitude</dt>
+        <dd>
+          {nm(distanceToSeaLevel)} <span className="dim">to sea level</span>
+        </dd>
       </dl>
     </section>
   );

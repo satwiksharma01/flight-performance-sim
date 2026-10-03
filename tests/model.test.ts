@@ -276,3 +276,21 @@ describe('climb and glide in the chart model', () => {
     expect(at.glide.distanceToSeaLevel).toBeCloseTo(3048 * at.glide.best.ratio, 6);
   });
 });
+
+describe('climb results past the polar', () => {
+  it('flags a jet maximum speed past Mach 0.7, and not the 172S', () => {
+    const jet = buildChartModel(
+      scenario({ presetId: 'jet-trainer', aircraft: GENERIC_JET_TRAINER, altitude: 6096 }),
+      view('mach'),
+    );
+    expect(jet.climb!.vmax!.speeds.mach).toBeGreaterThan(0.7);
+    expect(jet.climb!.vmax!.beyondModel).toBe(true);
+    expect(buildChartModel(scenario({}), view('tas')).climb!.vmax!.beyondModel).toBe(false);
+  });
+
+  it('reports the Mach of V_y at the service ceiling', () => {
+    const c172 = buildChartModel(scenario({}), view('tas'));
+    expect(c172.climb!.serviceCeilingMach!).toBeGreaterThan(0.1);
+    expect(c172.climb!.serviceCeilingMach!).toBeLessThan(0.7);
+  });
+});

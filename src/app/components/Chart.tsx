@@ -19,7 +19,8 @@ import 'uplot/dist/uPlot.min.css';
 
 export interface ChartSeries {
   readonly label: string;
-  readonly values: readonly number[];
+  /** One value per x; null leaves a gap */
+  readonly values: readonly (number | null)[];
   /** CSS custom property holding the stroke colour, e.g. `--series-1` */
   readonly colorVar: string;
   /** Dash pattern in CSS pixels; solid when omitted */
@@ -51,6 +52,8 @@ export interface ChartProps {
   readonly series: readonly ChartSeries[];
   readonly xMax: number;
   readonly yMax: number;
+  /** Bottom of the y-axis; 0 when omitted. Below zero, a zero line is drawn */
+  readonly yMin?: number;
   readonly xLabel: string;
   readonly yLabel: string;
   readonly formatX: (value: number) => string;
@@ -59,7 +62,7 @@ export interface ChartProps {
   readonly bands: readonly ChartBand[];
   /** Selected speed on the x-axis, and each series' value there */
   readonly selectedX: number;
-  readonly selectedY: readonly number[];
+  readonly selectedY: readonly (number | null)[];
   readonly emptyReason: string | null;
   readonly height: number;
   /** Changing this rebuilds the chart with freshly read colours */
@@ -153,6 +156,16 @@ export function Chart(props: ChartProps) {
       const p = latest.current;
       ctx.save();
 
+      if ((p.yMin ?? 0) < 0) {
+        const y0 = Math.round(u.valToPos(0, 'y', true)) + 0.5;
+        ctx.strokeStyle = theme.ink2;
+        ctx.lineWidth = px;
+        ctx.beginPath();
+        ctx.moveTo(bbox.left, y0);
+        ctx.lineTo(bbox.left + bbox.width, y0);
+        ctx.stroke();
+      }
+
       for (const band of p.bands) {
         const x0 = Math.max(u.valToPos(band.from, 'x', true), bbox.left);
         const x1 = Math.min(u.valToPos(band.to, 'x', true), bbox.left + bbox.width);
@@ -243,7 +256,7 @@ export function Chart(props: ChartProps) {
           for (let f = 0.12; f <= 0.9; f += 0.06) {
             const idx = Math.round(f * (n - 1));
             const xv = p.x[idx];
-            const yv = s.values[idx];
+            const yv = s.values[idx] ?? undefined;
             if (xv === undefined || yv === undefined) continue;
             const x = u.valToPos(xv, 'x', true);
             const y = u.valToPos(yv, 'y', true);
@@ -253,7 +266,7 @@ export function Chart(props: ChartProps) {
             let gap = Infinity;
             let above = true;
             p.series.forEach((other, j) => {
-              const ov = other.values[idx];
+              const ov = other.values[idx] ?? undefined;
               if (j === i || ov === undefined) return;
               const oy = u.valToPos(ov, 'y', true);
               if (Math.abs(oy - y) < gap) {
@@ -290,6 +303,7 @@ export function Chart(props: ChartProps) {
         ctx.stroke();
 
         p.selectedY.forEach((yv, i) => {
+          if (yv === null) return;
           const sy = u.valToPos(yv, 'y', true);
           if (sy < bbox.top || sy > bbox.top + bbox.height) return;
           ctx.beginPath();
@@ -308,10 +322,10 @@ export function Chart(props: ChartProps) {
     const options: uPlot.Options = {
       width: el.clientWidth || 600,
       height: latest.current.height,
-      padding: [TOP_PADDING, 12, 0, 0],
+      padding: [TOP_PADDING, 24, 0, 0],
       scales: {
         x: { time: false, auto: false, range: () => [0, latest.current.xMax] },
-        y: { auto: false, range: () => [0, latest.current.yMax] },
+        y: { auto: false, range: () => [latest.current.yMin ?? 0, latest.current.yMax] },
       },
       axes: [
         {
@@ -358,7 +372,7 @@ export function Chart(props: ChartProps) {
 
     const u = new uPlot(options, toData(latest.current), el);
     u.setScale('x', { min: 0, max: latest.current.xMax });
-    u.setScale('y', { min: 0, max: latest.current.yMax });
+    u.setScale('y', { min: latest.current.yMin ?? 0, max: latest.current.yMax });
     plot.current = u;
 
     // Click or drag anywhere on the plot to choose the selected speed.
@@ -410,7 +424,7 @@ export function Chart(props: ChartProps) {
     u.batch(() => {
       u.setData(toData(props), false);
       u.setScale('x', { min: 0, max: props.xMax });
-      u.setScale('y', { min: 0, max: props.yMax });
+      u.setScale('y', { min: props.yMin ?? 0, max: props.yMax });
     });
   });
 

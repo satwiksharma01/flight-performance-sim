@@ -455,7 +455,7 @@ input[type='range'] {
 
 .tiles {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -677,6 +677,12 @@ tr.is-dim th {
 }
 
 .readout dt {
+  color: var(--ink-2);
+}
+
+.readout dd.caution {
+  font-weight: 400;
+  text-align: left;
   color: var(--ink-2);
 }
 

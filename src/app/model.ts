@@ -289,6 +289,8 @@ export interface ClimbMark {
   readonly rocSmallAngleFpm: number;
   /** Climb angle, exact [rad] */
   readonly gamma: number;
+  /** Past Mach 0.7, where the polar's missing wave drag makes this optimistic */
+  readonly beyondModel: boolean;
 }
 
 export interface ClimbSummary {
@@ -297,7 +299,12 @@ export interface ClimbSummary {
   /** Best angle of climb */
   readonly vx: ClimbMark;
   /** Maximum level speed at full power, or null if level flight is impossible */
-  readonly vmax: { readonly tas: number; readonly x: number; readonly speeds: AirspeedSet } | null;
+  readonly vmax: {
+    readonly tas: number;
+    readonly x: number;
+    readonly speeds: AirspeedSet;
+    readonly beyondModel: boolean;
+  } | null;
   /** Fraction of the engine's sea-level rating available here [-] */
   readonly lapse: number;
   /** Propeller efficiency at V_y [-], or null for a jet */
@@ -305,6 +312,8 @@ export interface ClimbSummary {
   /** At this weight and ISA day [ft], null if out of reach */
   readonly absoluteCeilingFt: number | null;
   readonly serviceCeilingFt: number | null;
+  /** Mach of V_y at the service ceiling: past 0.7, the ceiling is optimistic */
+  readonly serviceCeilingMach: number | null;
   /** Best rate of climb against pressure altitude, to the absolute ceiling */
   readonly profile: { readonly altitudesFt: readonly number[]; readonly rocFpm: readonly (number | null)[] };
   /** At the selected speed, wings level */
@@ -332,9 +341,13 @@ export interface RateOfClimbChart {
   readonly powerOff: readonly number[];
   /** Wings-level stall at this weight, on the x-axis */
   readonly stallX: number;
+  /** Each curve at the selected speed [ft/min] */
+  readonly selected: { readonly exact: number | null; readonly smallAngle: number | null; readonly powerOff: number };
 }
 
-const profileCache = keyedCache<Pick<ClimbSummary, 'absoluteCeilingFt' | 'serviceCeilingFt' | 'profile'>>(16);
+const profileCache = keyedCache<
+  Pick<ClimbSummary, 'absoluteCeilingFt' | 'serviceCeilingFt' | 'serviceCeilingMach' | 'profile'>
+>(16);
 
 /** Ceilings and the climb-versus-altitude curve: independent of altitude and speed. */
 function climbProfile(aircraft: PoweredAircraft, deltaISA: number, altitudeMaxFt: number) {
@@ -361,7 +374,9 @@ function climbProfile(aircraft: PoweredAircraft, deltaISA: number, altitudeMaxFt
         rocFpm.push(roc);
       }
     }
+    const atService = c.service === null ? null : atPressureAltitude(c.service, deltaISA);
     return {
+      serviceCeilingMach: atService ? bestRateOfClimb(aircraft, atService).tas / atService.speedOfSound : null,
       absoluteCeilingFt: c.absolute === null ? null : c.absolute * FT_PER_M,
       serviceCeilingFt: c.service === null ? null : c.service * FT_PER_M,
       profile: { altitudesFt, rocFpm },
@@ -537,6 +552,7 @@ export function buildChartModel(scenario: Scenario, view: ViewSettings): ChartMo
     rocFpm: c.rateOfClimb * FPM_PER_MPS,
     rocSmallAngleFpm: c.rateOfClimbSmallAngle * FPM_PER_MPS,
     gamma: c.gamma,
+    beyondModel: c.tas / a >= COMPRESSIBILITY_ONSET,
   });
 
   let climb: ClimbSummary | null = null;
@@ -549,7 +565,12 @@ export function buildChartModel(scenario: Scenario, view: ViewSettings): ChartMo
       vmax:
         perf.maxLevelSpeed === null
           ? null
-          : { tas: perf.maxLevelSpeed, x: tasToAxis(perf.maxLevelSpeed, atmosphere, view), speeds: speedsAt(perf.maxLevelSpeed) },
+          : {
+              tas: perf.maxLevelSpeed,
+              x: tasToAxis(perf.maxLevelSpeed, atmosphere, view),
+              speeds: speedsAt(perf.maxLevelSpeed),
+              beyondModel: perf.maxLevelSpeed / a >= COMPRESSIBILITY_ONSET,
+            },
       lapse,
       propEfficiencyAtVy: propellerEfficiency(powered.propulsion, perf.vy.tas),
       ...climbProfile(powered, scenario.deltaISA, window.altitudeMaxFt),
@@ -605,6 +626,14 @@ export function buildChartModel(scenario: Scenario, view: ViewSettings): ChartMo
       smallAngle: powered ? smallAngle : null,
       powerOff,
       stallX: tasToAxis(vStall1g, atmosphere, view),
+      selected: (() => {
+        const at = powered ? climbAt(powered, atmosphere, scenario.tas, lapse) : null;
+        return {
+          exact: at ? at.rateOfClimb * FPM_PER_MPS : null,
+          smallAngle: at ? at.rateOfClimbSmallAngle * FPM_PER_MPS : null,
+          powerOff: -glideAtSpeed(aircraft, atmosphere, scenario.tas).sinkRate * FPM_PER_MPS,
+        };
+      })(),
     },
     climb,
     glide: {

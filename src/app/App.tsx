@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { atPressureAltitude, loadFactorForBank, vMinDrag, type Aircraft } from '../physics/index.js';
+import { atPressureAltitude, loadFactorForBank, vMinDrag, type Aircraft, type Propulsion } from '../physics/index.js';
 import { PRESETS, type PresetId } from '../data/aircraft/presets.js';
-import { SYSTEM_UNITS, axisToTas, buildChartModel, type ChartModel, type ViewSettings } from './model.js';
+import { SYSTEM_UNITS, axisToTas, buildChartModel, toForce, toPower, type ChartModel, type ViewSettings } from './model.js';
 import { canonicalize, readPermalink, writePermalink, type Permalink } from './permalink.js';
-import { axisLabel, axisTick, tick } from './format.js';
+import { axisLabel, axisTick, num, tick } from './format.js';
 import { Chart, type ChartBand, type ChartMarker } from './components/Chart.js';
 import { AircraftPanel, ConditionPanel, ViewPanel } from './components/Controls.js';
-import { AtmospherePanel, SelectedPanel, SpeedsTable, Tiles } from './components/Readouts.js';
+import { AtmospherePanel, ClimbPanel, GlidePanel, SelectedPanel, SpeedsTable, Tiles } from './components/Readouts.js';
 
 const REPO_URL = 'https://github.com/satwiksharma01/Aerospace-Flight-Performance-Simulator';
 
@@ -33,6 +33,28 @@ function markersFor(model: ChartModel): ChartMarker[] {
     const [symbol = m.label, subscript = ''] = m.label.split('_');
     return { x: m.x, symbol, subscript, attainable: m.attainable };
   });
+}
+
+/** V_max joins the polar's markers wherever full-power thrust is drawn. */
+function markersWithMaxSpeed(model: ChartModel): ChartMarker[] {
+  const markers = markersFor(model);
+  const vmax = model.climb?.vmax;
+  return vmax ? [...markers, { x: vmax.x, symbol: 'V', subscript: 'max', attainable: true }] : markers;
+}
+
+function climbMarkers(model: ChartModel): ChartMarker[] {
+  if (!model.climb) {
+    return [
+      { x: model.glide.minSink.x, symbol: 'V', subscript: 'ms', attainable: true },
+      { x: model.glide.best.x, symbol: 'V', subscript: 'bg', attainable: true },
+    ];
+  }
+  const { vx, vy, vmax } = model.climb;
+  const markers: ChartMarker[] = [
+    { x: vx.x, symbol: 'V', subscript: 'x', attainable: true },
+    { x: vy.x, symbol: 'V', subscript: 'y', attainable: true },
+  ];
+  return vmax ? [...markers, { x: vmax.x, symbol: 'V', subscript: 'max', attainable: true }] : markers;
 }
 
 function bandsFor(model: ChartModel): ChartBand[] {
@@ -94,6 +116,13 @@ export function App() {
         value === null ? (key === 'clMaxFlaps' ? withoutFlaps : s.scenario.aircraft) : { ...s.scenario.aircraft, [key]: value };
       // An operating mass above a newly lowered max takeoff mass fails the
       // permalink's check, so canonicalisation returns it to the maximum.
+      return { ...s, scenario: { ...s.scenario, presetId: null, aircraft } };
+    });
+
+  const setEngine = (engine: Propulsion | undefined) =>
+    update((s) => {
+      const { propulsion: _previous, ...glider } = s.scenario.aircraft;
+      const aircraft: Aircraft = engine ? { ...glider, propulsion: engine } : glider;
       return { ...s, scenario: { ...s.scenario, presetId: null, aircraft } };
     });
 
@@ -175,6 +204,7 @@ export function App() {
             basePresetId={state.basePresetId}
             onPreset={selectPreset}
             onEdit={editAircraft}
+            onEngine={setEngine}
             system={view.system}
           />
           {model && (
@@ -206,7 +236,11 @@ export function App() {
                 <Chart
                   wide
                   title="Drag"
-                  description="Thrust required for level flight equals drag. Parasite drag grows with speed, induced drag falls, and the total is lowest where they cross."
+                  description={
+                    model.available
+                      ? 'Thrust required for level flight equals drag. Parasite drag grows with speed and induced drag falls; the total is lowest where they cross. Full-power thrust meets drag at the maximum level speed.'
+                      : 'Thrust required for level flight equals drag. Parasite drag grows with speed, induced drag falls, and the total is lowest where they cross.'
+                  }
                   x={model.x}
                   series={[
                     { label: 'Total drag', values: model.drag, colorVar: '--series-1', directLabel: 'Total' },
@@ -224,6 +258,9 @@ export function App() {
                       dash: [2, 3],
                       directLabel: 'Induced',
                     },
+                    ...(model.available
+                      ? [{ label: 'Thrust available', values: model.available.thrust, colorVar: '--ink', directLabel: 'Thrust available' }]
+                      : []),
                   ]}
                   xMax={model.window.xMax}
                   yMax={model.window.dragMax}
@@ -231,13 +268,14 @@ export function App() {
                   yLabel={`Drag (${SYSTEM_UNITS[view.system].force})`}
                   formatX={(v) => axisTick(v, view)}
                   formatY={tick}
-                  markers={markersFor(model)}
+                  markers={markersWithMaxSpeed(model)}
                   bands={bandsFor(model)}
                   selectedX={model.selected.x}
                   selectedY={[
-                    model.selected.point.drag,
-                    model.selected.point.parasiteDrag,
-                    model.selected.point.inducedDrag,
+                    toForce(model.selected.point.drag, view.system),
+                    toForce(model.selected.point.parasiteDrag, view.system),
+                    toForce(model.selected.point.inducedDrag, view.system),
+                    ...(model.climb ? [toForce(model.climb.selected.thrust, view.system)] : []),
                   ]}
                   emptyReason={model.emptyReason}
                   height={320}
@@ -246,19 +284,31 @@ export function App() {
                 />
                 <Chart
                   title="Power required"
-                  description="Drag times true airspeed. Its minimum, at a slower speed than minimum drag, is the best endurance for a propeller aircraft."
+                  description={
+                    model.available
+                      ? 'Drag times true airspeed. Its minimum is the best endurance for a propeller aircraft. The gap up to power available, divided by weight, is the rate of climb.'
+                      : 'Drag times true airspeed. Its minimum, at a slower speed than minimum drag, is the best endurance for a propeller aircraft.'
+                  }
                   x={model.x}
-                  series={[{ label: 'Power', values: model.power, colorVar: '--series-1' }]}
+                  series={[
+                    { label: 'Power required', values: model.power, colorVar: '--series-1', ...(model.available ? { directLabel: 'Required' } : {}) },
+                    ...(model.available
+                      ? [{ label: 'Power available', values: model.available.power, colorVar: '--ink', directLabel: 'Available' }]
+                      : []),
+                  ]}
                   xMax={model.window.xMax}
                   yMax={model.window.powerMax}
                   xLabel={axisLabel(view)}
                   yLabel={`Power (${SYSTEM_UNITS[view.system].power})`}
                   formatX={(v) => axisTick(v, view)}
                   formatY={tick}
-                  markers={markersFor(model)}
+                  markers={markersWithMaxSpeed(model)}
                   bands={bandsFor(model)}
                   selectedX={model.selected.x}
-                  selectedY={[model.selected.point.powerRequired / 1000]}
+                  selectedY={[
+                    toPower(model.selected.point.powerRequired / 1000, view.system),
+                    ...(model.climb ? [toPower(model.climb.selected.powerAvailable, view.system)] : []),
+                  ]}
                   emptyReason={model.emptyReason}
                   height={240}
                   theme={theme}
@@ -284,9 +334,82 @@ export function App() {
                   theme={theme}
                   onPick={pickSpeed}
                 />
+                <Chart
+                  wide={!model.climb}
+                  title={model.climb ? 'Rate of climb' : 'Sink rate'}
+                  description={
+                    model.climb
+                      ? 'Full power, wings level. The exact steady climb, the small-angle (P_A − P_R)/W, and the power-off sink polar below zero. V_y is the peak; V_x is the steepest climb.'
+                      : 'The glider polar: sink rate against speed. Minimum sink is its peak; best glide is where a line from the origin just touches it.'
+                  }
+                  x={model.rateOfClimb.x}
+                  series={[
+                    ...(model.rateOfClimb.exact && model.rateOfClimb.smallAngle
+                      ? [
+                          { label: 'Full power', values: model.rateOfClimb.exact, colorVar: '--series-1', directLabel: 'Full power' },
+                          { label: 'Small-angle', values: model.rateOfClimb.smallAngle, colorVar: '--series-2', dash: [6, 4] },
+                        ]
+                      : []),
+                    { label: 'Power off', values: model.rateOfClimb.powerOff, colorVar: '--series-3', dash: [2, 3], directLabel: 'Power off' },
+                  ]}
+                  xMax={model.window.xMax}
+                  yMin={model.window.rocMin}
+                  yMax={model.window.rocMax}
+                  xLabel={axisLabel(view)}
+                  yLabel="Rate of climb (ft/min)"
+                  formatX={(v) => axisTick(v, view)}
+                  formatY={tick}
+                  markers={climbMarkers(model)}
+                  bands={[
+                    { from: 0, to: model.rateOfClimb.stallX, label: 'Below stall' },
+                    ...bandsFor(model).slice(1),
+                  ]}
+                  selectedX={model.selected.x}
+                  selectedY={[
+                    ...(model.climb ? [model.rateOfClimb.selected.exact, model.rateOfClimb.selected.smallAngle] : []),
+                    model.rateOfClimb.selected.powerOff,
+                  ]}
+                  emptyReason={model.rateOfClimb.x.length === 0 ? 'Here the whole curve lies beyond the right edge of the chart.' : null}
+                  height={260}
+                  theme={theme}
+                  onPick={pickSpeed}
+                />
+                {model.climb && (
+                  <Chart
+                    title="Climb against altitude"
+                    description="Best rate of climb at each pressure altitude, at this weight and ISA day: 100 ft/min at the service ceiling, zero at the absolute ceiling. Click to set the altitude."
+                    x={model.climb.profile.altitudesFt}
+                    series={[{ label: 'Best rate of climb', values: model.climb.profile.rocFpm, colorVar: '--series-1' }]}
+                    xMax={model.window.altitudeMaxFt}
+                    yMax={model.window.rocMax}
+                    xLabel="Pressure altitude (ft)"
+                    yLabel="Best rate of climb (ft/min)"
+                    formatX={(v) => num(v)}
+                    formatY={tick}
+                    markers={[
+                      ...(model.climb.serviceCeilingFt === null
+                        ? []
+                        : [{ x: model.climb.serviceCeilingFt, symbol: 'Service', subscript: '', attainable: true }]),
+                      ...(model.climb.absoluteCeilingFt === null
+                        ? []
+                        : [{ x: model.climb.absoluteCeilingFt, symbol: 'Absolute', subscript: '', attainable: true }]),
+                    ]}
+                    bands={[]}
+                    selectedX={scenario.altitude / 0.3048}
+                    selectedY={[model.climb.vy.rocFpm]}
+                    emptyReason={model.climb.profile.rocFpm[0] === null ? 'At this weight it cannot climb even at sea level.' : null}
+                    height={260}
+                    theme={theme}
+                    onPick={(ft) => update((s) => ({ ...s, scenario: { ...s.scenario, altitude: Math.round(ft) * 0.3048 } }))}
+                  />
+                )}
               </div>
               <div className="tables">
                 <SpeedsTable model={model} view={view} />
+                {scenario.aircraft.propulsion && (
+                  <ClimbPanel model={model} view={view} engine={scenario.aircraft.propulsion} />
+                )}
+                <GlidePanel model={model} view={view} />
                 <SelectedPanel model={model} view={view} />
                 <AtmospherePanel model={model} view={view} />
               </div>

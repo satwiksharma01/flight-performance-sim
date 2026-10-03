@@ -1,5 +1,15 @@
 import { useEffect, useId, useState, type ReactNode } from 'react';
-import { AIRCRAFT_LIMITS, G0, bankForLoadFactor, type Aircraft } from '../../physics/index.js';
+import {
+  AIRCRAFT_LIMITS,
+  DEFAULT_ENGINES,
+  ENGINE_KINDS,
+  G0,
+  PROPULSION_LIMITS,
+  bankForLoadFactor,
+  type Aircraft,
+  type EngineKind,
+  type Propulsion,
+} from '../../physics/index.js';
 import { PRESETS, PRESET_IDS, type PresetId } from '../../data/aircraft/presets.js';
 import {
   SYSTEM_UNITS,
@@ -19,41 +29,170 @@ const FT_PER_M = 1 / 0.3048;
 
 // --- Aircraft ---------------------------------------------------------------
 
-interface FieldSpec {
-  readonly key: Exclude<keyof Aircraft, 'name' | 'propulsion'>;
+/**
+ * One editable number. Stored in SI, shown in the chosen units, and held to the
+ * same range a permalink is, so the editor can't make a link that won't load.
+ */
+interface FieldDef {
+  readonly id: string;
   readonly label: string;
-  /** Converted by the unit system; plain coefficients have none */
-  readonly quantity?: 'mass' | 'area';
+  readonly unit?: string;
   readonly hint: string;
   /** May be left blank: the aircraft simply doesn't have it */
   readonly optional?: boolean;
+  /** Supported range, SI */
+  readonly min: number;
+  readonly max: number;
+  readonly toDisplay: (si: number) => number;
+  readonly fromDisplay: (shown: number) => number;
 }
 
-const FIELDS: readonly FieldSpec[] = [
-  { key: 'mass', label: 'Max takeoff mass', quantity: 'mass', hint: 'The weight slider flies anything up to this.' },
-  { key: 'wingArea', label: 'Wing area', quantity: 'area', hint: 'Reference area S.' },
-  { key: 'aspectRatio', label: 'Aspect ratio', hint: 'b²/S. Higher means less induced drag.' },
-  { key: 'oswaldEfficiency', label: 'Oswald efficiency', hint: 'Span efficiency e.' },
-  { key: 'cd0', label: 'CD₀', hint: 'Zero-lift drag coefficient.' },
-  { key: 'clMax', label: 'CL max', hint: 'Clean maximum lift coefficient.' },
-  {
-    key: 'clMaxFlaps',
-    label: 'CL max, flaps',
-    hint: 'Landing-flap maximum lift coefficient. Leave blank for none.',
-    optional: true,
-  },
-];
+type AircraftKey = Exclude<keyof Aircraft, 'name' | 'propulsion'>;
 
-/** SI value to what the field shows, and back. */
-function toDisplay(spec: FieldSpec, si: number, system: UnitSystem): number {
-  if (spec.quantity === 'mass') return toMass(si, system);
-  if (spec.quantity === 'area') return toArea(si, system);
-  return si;
+const identity = { toDisplay: (v: number) => v, fromDisplay: (v: number) => v };
+const N_PER_LBF = 0.45359237 * 9.80665;
+const W_PER_HP = 745.699872;
+const MPS_PER_KT = 1852 / 3600;
+
+function aircraftFields(system: UnitSystem): readonly (FieldDef & { readonly key: AircraftKey })[] {
+  const L = AIRCRAFT_LIMITS;
+  const range = (key: AircraftKey) => ({ min: L[key].min, max: L[key].max });
+  return [
+    {
+      key: 'mass',
+      id: 'mass',
+      label: 'Max takeoff mass',
+      unit: SYSTEM_UNITS[system].mass,
+      hint: 'The weight slider flies anything up to this.',
+      ...range('mass'),
+      toDisplay: (v) => toMass(v, system),
+      fromDisplay: (v) => fromMass(v, system),
+    },
+    {
+      key: 'wingArea',
+      id: 'wing-area',
+      label: 'Wing area',
+      unit: SYSTEM_UNITS[system].area,
+      hint: 'Reference area S.',
+      ...range('wingArea'),
+      toDisplay: (v) => toArea(v, system),
+      fromDisplay: (v) => fromArea(v, system),
+    },
+    { key: 'aspectRatio', id: 'ar', label: 'Aspect ratio', hint: 'b²/S. Higher means less induced drag.', ...range('aspectRatio'), ...identity },
+    { key: 'oswaldEfficiency', id: 'e', label: 'Oswald efficiency', hint: 'Span efficiency e.', ...range('oswaldEfficiency'), ...identity },
+    { key: 'cd0', id: 'cd0', label: 'CD₀', hint: 'Zero-lift drag coefficient.', ...range('cd0'), ...identity },
+    { key: 'clMax', id: 'clmax', label: 'CL max', hint: 'Clean maximum lift coefficient.', ...range('clMax'), ...identity },
+    {
+      key: 'clMaxFlaps',
+      id: 'clf',
+      label: 'CL max, flaps',
+      hint: 'Landing-flap maximum lift coefficient. Leave blank for none.',
+      optional: true,
+      ...range('clMaxFlaps'),
+      ...identity,
+    },
+  ];
 }
-function fromDisplay(spec: FieldSpec, shown: number, system: UnitSystem): number {
-  if (spec.quantity === 'mass') return fromMass(shown, system);
-  if (spec.quantity === 'area') return fromArea(shown, system);
-  return shown;
+
+/** The fields an engine of this kind has, each with a way to set it. */
+function engineFields(
+  engine: Propulsion,
+  system: UnitSystem,
+): readonly { readonly def: FieldDef; readonly value: number | undefined; readonly set: (v: number | null) => Propulsion }[] {
+  const L = PROPULSION_LIMITS;
+  const us = system === 'us';
+  const force = {
+    unit: us ? 'lbf' : 'N',
+    toDisplay: (n: number) => (us ? n / N_PER_LBF : n),
+    fromDisplay: (v: number) => (us ? v * N_PER_LBF : v),
+  };
+  const power = {
+    unit: us ? 'hp' : 'kW',
+    toDisplay: (w: number) => w / (us ? W_PER_HP : 1000),
+    fromDisplay: (v: number) => v * (us ? W_PER_HP : 1000),
+  };
+  const lapse = (value: number, set: (v: number) => Propulsion) => ({
+    def: {
+      id: 'lx',
+      label: 'Lapse exponent',
+      hint: 'm in sigma^m: about 0.7 for a high-bypass fan, up to 1.',
+      min: L.lapseExponent.min,
+      max: L.lapseExponent.max,
+      ...identity,
+    },
+    value,
+    set: (v: number | null) => set(v ?? value),
+  });
+
+  if (engine.kind === 'turbofan') {
+    return [
+      {
+        def: { id: 'ft', label: 'Static thrust', hint: 'Sea-level static thrust.', min: L.thrust.min, max: L.thrust.max, ...force },
+        value: engine.thrust,
+        set: (v) => ({ ...engine, thrust: v ?? engine.thrust }),
+      },
+      lapse(engine.lapseExponent, (v) => ({ ...engine, lapseExponent: v })),
+    ];
+  }
+
+  const propeller = engine.propeller;
+  const propFields = [
+    {
+      def: {
+        id: 'ts',
+        label: 'Static thrust',
+        hint: 'Propeller thrust at zero airspeed, full power, sea level.',
+        min: L.staticThrust.min,
+        max: L.staticThrust.max,
+        ...force,
+      },
+      value: propeller.staticThrust,
+      set: (v: number | null) => ({ ...engine, propeller: { ...propeller, staticThrust: v ?? propeller.staticThrust } }),
+    },
+    {
+      def: {
+        id: 'v0',
+        label: 'Zero-thrust speed',
+        unit: 'kt',
+        hint: 'True airspeed where the straight thrust line would reach zero.',
+        min: L.zeroThrustSpeed.min,
+        max: L.zeroThrustSpeed.max,
+        toDisplay: (v: number) => v / MPS_PER_KT,
+        fromDisplay: (v: number) => v * MPS_PER_KT,
+      },
+      value: propeller.zeroThrustSpeed,
+      set: (v: number | null) => ({ ...engine, propeller: { ...propeller, zeroThrustSpeed: v ?? propeller.zeroThrustSpeed } }),
+    },
+  ];
+  const powerField = {
+    def: { id: 'pw', label: 'Rated power', hint: 'Sea-level shaft power.', min: L.power.min, max: L.power.max, ...power },
+    value: engine.power,
+    set: (v: number | null) => ({ ...engine, power: v ?? engine.power }),
+  };
+
+  if (engine.kind === 'turboprop') {
+    return [powerField, lapse(engine.lapseExponent, (v) => ({ ...engine, lapseExponent: v })), ...propFields];
+  }
+  const { criticalAltitude: _critical, ...aspirated } = engine;
+  return [
+    powerField,
+    {
+      def: {
+        id: 'hc',
+        label: 'Critical altitude',
+        unit: 'ft',
+        hint: 'Turbocharged: full power up to this pressure altitude. Blank: normally aspirated.',
+        optional: true,
+        min: L.criticalAltitude.min,
+        max: L.criticalAltitude.max,
+        toDisplay: (m: number) => m * FT_PER_M,
+        fromDisplay: (ft: number) => ft / FT_PER_M,
+      },
+      value: engine.criticalAltitude,
+      set: (v) => (v === null ? aspirated : { ...engine, criticalAltitude: v }),
+    },
+    ...propFields,
+  ];
 }
 
 /** Seven significant figures: 2550 lb shows as 2550, not 2550.0000000001. */
@@ -61,42 +200,36 @@ function show(value: number): string {
   return String(Number(value.toPrecision(7)));
 }
 
-/**
- * The same ranges a permalink is held to, so the editor can't make a link that
- * won't load. Checked in the displayed unit, then converted back to SI.
- */
-function validate(spec: FieldSpec, raw: string, system: UnitSystem): { value: number | null } | { error: string } {
-  if (raw.trim() === '') return spec.optional ? { value: null } : { error: 'Enter a number.' };
+/** Checked in the displayed unit, then converted back to SI. */
+function validate(def: FieldDef, raw: string): { value: number | null } | { error: string } {
+  if (raw.trim() === '') return def.optional ? { value: null } : { error: 'Enter a number.' };
   const value = Number(raw);
   if (!Number.isFinite(value)) return { error: 'Enter a number.' };
-  const limits = AIRCRAFT_LIMITS[spec.key];
-  const min = toDisplay(spec, limits.min, system);
-  const max = toDisplay(spec, limits.max, system);
+  const min = def.toDisplay(def.min);
+  const max = def.toDisplay(def.max);
   if (value < min * (1 - 1e-9) || value > max * (1 + 1e-9)) {
     const fmt = (v: number) => Number(v.toPrecision(4)).toLocaleString('en-US', { maximumFractionDigits: 6 });
     return { error: `Between ${fmt(min)} and ${fmt(max)}.` };
   }
-  return { value: fromDisplay(spec, value, system) };
+  return { value: def.fromDisplay(value) };
 }
 
 function NumberField({
-  spec,
+  def,
   value,
-  system,
   onCommit,
 }: {
-  spec: FieldSpec;
+  def: FieldDef;
   value: number | undefined;
-  system: UnitSystem;
   onCommit: (value: number | null) => void;
 }) {
   const id = useId();
-  const shown = value === undefined ? '' : show(toDisplay(spec, value, system));
+  const shown = value === undefined ? '' : show(def.toDisplay(value));
   const [draft, setDraft] = useState(shown);
   const [error, setError] = useState<string | null>(null);
 
-  // Follow outside changes (a preset switch, a reset) unless the draft already
-  // means the same number — otherwise typing "0.0" would be rewritten to "0".
+  // Follow outside changes (a preset switch, a reset, a unit switch) unless the
+  // draft already means the same number: typing "0.0" mustn't become "0".
   useEffect(() => {
     const same = value === undefined ? draft.trim() === '' : draft.trim() !== '' && show(Number(draft)) === shown;
     if (!same) {
@@ -108,9 +241,9 @@ function NumberField({
 
   return (
     <div className="field">
-      <label htmlFor={id} title={spec.hint}>
-        {spec.label}
-        {spec.quantity && <span className="unit"> {SYSTEM_UNITS[system][spec.quantity]}</span>}
+      <label htmlFor={id} title={def.hint}>
+        {def.label}
+        {def.unit && <span className="unit"> {def.unit}</span>}
       </label>
       <input
         id={id}
@@ -118,13 +251,13 @@ function NumberField({
         inputMode="decimal"
         autoComplete="off"
         spellCheck={false}
-        placeholder={spec.optional ? 'none' : undefined}
+        placeholder={def.optional ? 'none' : undefined}
         value={draft}
         aria-invalid={error !== null}
         aria-describedby={error ? `${id}-error` : undefined}
         onChange={(e) => {
           setDraft(e.target.value);
-          const result = validate(spec, e.target.value, system);
+          const result = validate(def, e.target.value);
           if ('error' in result) {
             setError(result.error);
           } else {
@@ -142,12 +275,60 @@ function NumberField({
   );
 }
 
+const ENGINE_NAME: Record<EngineKind | 'none', string> = {
+  none: 'None: a glider',
+  piston: 'Piston',
+  turboprop: 'Turboprop',
+  turbofan: 'Turbofan',
+};
+
+function EngineEditor({
+  engine,
+  system,
+  onChange,
+}: {
+  engine: Propulsion | undefined;
+  system: UnitSystem;
+  onChange: (engine: Propulsion | undefined) => void;
+}) {
+  const id = useId();
+  return (
+    <div className="engine-editor">
+      <div className="field">
+        <label htmlFor={id}>Engine</label>
+        <select
+          id={id}
+          value={engine?.kind ?? 'none'}
+          onChange={(e) => {
+            const kind = e.target.value as EngineKind | 'none';
+            onChange(kind === 'none' ? undefined : engine?.kind === kind ? engine : DEFAULT_ENGINES[kind]);
+          }}
+        >
+          {(['none', ...ENGINE_KINDS] as const).map((kind) => (
+            <option key={kind} value={kind}>
+              {ENGINE_NAME[kind]}
+            </option>
+          ))}
+        </select>
+      </div>
+      {engine && (
+        <div className="fields">
+          {engineFields(engine, system).map((f) => (
+            <NumberField key={`${engine.kind}-${f.def.id}`} def={f.def} value={f.value} onCommit={(v) => onChange(f.set(v))} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AircraftPanel({
   aircraft,
   presetId,
   basePresetId,
   onPreset,
   onEdit,
+  onEngine,
   system,
 }: {
   aircraft: Aircraft;
@@ -155,7 +336,8 @@ export function AircraftPanel({
   basePresetId: string | null;
   system: UnitSystem;
   onPreset: (id: PresetId) => void;
-  onEdit: (key: FieldSpec['key'], value: number | null) => void;
+  onEdit: (key: AircraftKey, value: number | null) => void;
+  onEngine: (engine: Propulsion | undefined) => void;
 }) {
   const id = useId();
   const modified = presetId === null;
@@ -191,16 +373,11 @@ export function AircraftPanel({
       <details className="editor">
         <summary>Edit parameters</summary>
         <div className="fields">
-          {FIELDS.map((spec) => (
-            <NumberField
-              key={spec.key}
-              spec={spec}
-              system={system}
-              value={aircraft[spec.key]}
-              onCommit={(v) => onEdit(spec.key, v)}
-            />
+          {aircraftFields(system).map((def) => (
+            <NumberField key={def.key} def={def} value={aircraft[def.key]} onCommit={(v) => onEdit(def.key, v)} />
           ))}
         </div>
+        <EngineEditor engine={aircraft.propulsion} system={system} onChange={onEngine} />
       </details>
     </section>
   );
