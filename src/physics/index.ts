@@ -11,5 +11,8 @@ export * from './units.js';
 export * from './atmosphere.js';
 export * from './airspeed.js';
 export * from './aero.js';
+export * from './propulsion.js';
 export * from './performance/curves.js';
 export * from './performance/turn.js';
+export * from './performance/climb.js';
+export * from './performance/glide.js';

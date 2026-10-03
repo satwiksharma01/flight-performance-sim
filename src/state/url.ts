@@ -17,6 +17,13 @@
  */
 
 import { AIRCRAFT_LIMITS, validateAircraft, type Aircraft } from '../physics/aero.js';
+import {
+  DEFAULT_ENGINES,
+  ENGINE_KINDS,
+  PROPULSION_LIMITS,
+  type EngineKind,
+  type Propulsion,
+} from '../physics/propulsion.js';
 import { ISA_CEILING } from '../physics/constants.js';
 import { CESSNA_172S, PRESET_IDS, getPreset } from '../data/aircraft/presets.js';
 
@@ -78,6 +85,14 @@ const KEY = {
   tas: 'v',
   operatingMass: 'w',
   loadFactor: 'n',
+  // The engine. eng=none removes a preset's engine.
+  engine: 'eng',
+  power: 'pw',
+  fanThrust: 'ft',
+  lapseExponent: 'lx',
+  criticalAltitude: 'hc',
+  staticThrust: 'ts',
+  zeroThrustSpeed: 'v0',
 } as const;
 
 const LIMITS = {
@@ -102,8 +117,40 @@ function sameNumber(a: number | undefined, b: number | undefined): boolean {
   return formatNumber(a) === formatNumber(b);
 }
 
+/** The numbers that define an engine, keyed by their query-string key. */
+function engineFields(p: Propulsion): Record<string, number> {
+  switch (p.kind) {
+    case 'piston':
+      return {
+        [KEY.power]: p.power,
+        [KEY.staticThrust]: p.propeller.staticThrust,
+        [KEY.zeroThrustSpeed]: p.propeller.zeroThrustSpeed,
+        ...(p.criticalAltitude === undefined ? {} : { [KEY.criticalAltitude]: p.criticalAltitude }),
+      };
+    case 'turboprop':
+      return {
+        [KEY.power]: p.power,
+        [KEY.lapseExponent]: p.lapseExponent,
+        [KEY.staticThrust]: p.propeller.staticThrust,
+        [KEY.zeroThrustSpeed]: p.propeller.zeroThrustSpeed,
+      };
+    case 'turbofan':
+      return { [KEY.fanThrust]: p.thrust, [KEY.lapseExponent]: p.lapseExponent };
+  }
+}
+
+function samePropulsion(a: Propulsion | undefined, b: Propulsion | undefined): boolean {
+  if (a === undefined || b === undefined) return a === b;
+  if (a.kind !== b.kind) return false;
+  const fa = engineFields(a);
+  const fb = engineFields(b);
+  const keys = new Set([...Object.keys(fa), ...Object.keys(fb)]);
+  return [...keys].every((key) => sameNumber(fa[key], fb[key]));
+}
+
 function sameAircraft(a: Aircraft, b: Aircraft): boolean {
   return (
+    samePropulsion(a.propulsion, b.propulsion) &&
     a.name === b.name &&
     sameNumber(a.mass, b.mass) &&
     sameNumber(a.wingArea, b.wingArea) &&
@@ -144,6 +191,20 @@ export function encodeScenario(scenario: Scenario): string {
   }
   if (ac.clMaxFlaps !== undefined && (!base || !sameNumber(ac.clMaxFlaps, base.clMaxFlaps))) {
     params.set(KEY.clMaxFlaps, formatNumber(ac.clMaxFlaps));
+  }
+  // An engine that differs from the preset's is written out whole: it's short,
+  // and a partial engine would be ambiguous when the kind changes.
+  // With no preset, the decoder starts from the default aircraft, so even "no
+  // engine" has to be said.
+  if (!base || !samePropulsion(ac.propulsion, base.propulsion)) {
+    if (ac.propulsion === undefined) {
+      params.set(KEY.engine, 'none');
+    } else {
+      params.set(KEY.engine, ac.propulsion.kind);
+      for (const [key, value] of Object.entries(engineFields(ac.propulsion))) {
+        params.set(key, formatNumber(value));
+      }
+    }
   }
 
   // Flight condition. Defaults are omitted so the common case stays short.
@@ -214,6 +275,81 @@ function readNumber(
   return value;
 }
 
+/**
+ * The engine: the preset's, unless the link says otherwise. `eng` switches the
+ * kind (starting from the preset's engine if it's the same kind, a default if
+ * not); the other keys override single numbers.
+ */
+function readEngine(params: URLSearchParams, aircraft: Aircraft, problems: string[]): Aircraft {
+  let engine: Propulsion | undefined = aircraft.propulsion;
+
+  const rawKind = params.get(KEY.engine);
+  if (rawKind !== null) {
+    if (rawKind === 'none') {
+      engine = undefined;
+    } else if ((ENGINE_KINDS as readonly string[]).includes(rawKind)) {
+      const kind = rawKind as EngineKind;
+      engine = engine?.kind === kind ? engine : DEFAULT_ENGINES[kind];
+    } else {
+      problems.push(`Unknown engine "${rawKind}". Expected one of: none, ${ENGINE_KINDS.join(', ')}.`);
+    }
+  }
+
+  const L = PROPULSION_LIMITS;
+  const read = (key: string, limits: { readonly label: string; readonly min: number; readonly max: number }) =>
+    readNumber(params, key, limits.label, problems, { min: limits.min, max: limits.max });
+  const power = read(KEY.power, L.power);
+  const fanThrust = read(KEY.fanThrust, L.thrust);
+  const lapse = read(KEY.lapseExponent, L.lapseExponent);
+  const critical = read(KEY.criticalAltitude, L.criticalAltitude);
+  const staticThrust = read(KEY.staticThrust, L.staticThrust);
+  const zeroSpeed = read(KEY.zeroThrustSpeed, L.zeroThrustSpeed);
+
+  const unused = (value: number | undefined, label: string) => {
+    if (value === undefined) return;
+    const what = engine ? `a ${engine.kind} engine` : 'an aircraft without an engine';
+    problems.push(`${label} doesn't apply to ${what}; ignored.`);
+  };
+
+  if (engine === undefined) {
+    unused(power, L.power.label);
+    unused(fanThrust, L.thrust.label);
+    unused(lapse, L.lapseExponent.label);
+    unused(critical, L.criticalAltitude.label);
+    unused(staticThrust, L.staticThrust.label);
+    unused(zeroSpeed, L.zeroThrustSpeed.label);
+    const { propulsion: _none, ...glider } = aircraft;
+    return glider;
+  }
+
+  if (engine.kind === 'turbofan') {
+    unused(power, L.power.label);
+    unused(critical, L.criticalAltitude.label);
+    unused(staticThrust, L.staticThrust.label);
+    unused(zeroSpeed, L.zeroThrustSpeed.label);
+    engine = { ...engine, thrust: fanThrust ?? engine.thrust, lapseExponent: lapse ?? engine.lapseExponent };
+  } else {
+    unused(fanThrust, L.thrust.label);
+    const propeller = {
+      staticThrust: staticThrust ?? engine.propeller.staticThrust,
+      zeroThrustSpeed: zeroSpeed ?? engine.propeller.zeroThrustSpeed,
+    };
+    if (engine.kind === 'turboprop') {
+      unused(critical, L.criticalAltitude.label);
+      engine = { ...engine, power: power ?? engine.power, lapseExponent: lapse ?? engine.lapseExponent, propeller };
+    } else {
+      unused(lapse, L.lapseExponent.label);
+      engine = {
+        ...engine,
+        power: power ?? engine.power,
+        propeller,
+        ...(critical !== undefined ? { criticalAltitude: critical } : {}),
+      };
+    }
+  }
+  return { ...aircraft, propulsion: engine };
+}
+
 /** An aircraft field's supported range, rejecting zero and negatives by name. */
 function range(field: keyof typeof AIRCRAFT_LIMITS): NumberFieldOptions {
   const { min, max } = AIRCRAFT_LIMITS[field];
@@ -273,6 +409,8 @@ export function decodeScenario(query: string): DecodeResult {
 
   const clMaxFlaps = readNumber(params, KEY.clMaxFlaps, 'CLmax with flaps', problems, range('clMaxFlaps'));
   if (clMaxFlaps !== undefined) aircraft = { ...aircraft, clMaxFlaps };
+
+  aircraft = readEngine(params, aircraft, problems);
 
   // If anything was overridden the result is no longer the preset, so the id is
   // dropped — otherwise the link would claim to be a stock aircraft that it is

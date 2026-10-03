@@ -14,7 +14,7 @@ import {
   vMinPower,
   type Aircraft,
 } from '../src/physics/aero.js';
-import { CESSNA_172S, GENERIC_SAILPLANE } from '../src/data/aircraft/presets.js';
+import { CESSNA_172S, GENERIC_JET_TRAINER, GENERIC_SAILPLANE } from '../src/data/aircraft/presets.js';
 
 const SEA_LEVEL = isa(0);
 const ALTITUDE = isa(4000);
@@ -161,7 +161,9 @@ describe('characteristic speed markers', () => {
   });
 
   it('marks every characteristic speed attainable for a normal aircraft', () => {
-    for (const marker of characteristicSpeeds(CESSNA_172S, SEA_LEVEL)) {
+    // Not the 172S: its polar, calibrated to the POH glide, puts CL_mp = 1.62
+    // above its CLmax of 1.54, so V_mp sits just below the stall.
+    for (const marker of characteristicSpeeds(GENERIC_JET_TRAINER, SEA_LEVEL)) {
       expect(marker.attainable).toBe(true);
     }
     for (const marker of characteristicSpeeds(GENERIC_SAILPLANE, SEA_LEVEL)) {

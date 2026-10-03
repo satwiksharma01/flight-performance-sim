@@ -11,6 +11,7 @@
  */
 
 import { G0 } from './constants.js';
+import type { Propulsion } from './propulsion.js';
 
 export interface Aircraft {
   readonly name: string;
@@ -28,6 +29,8 @@ export interface Aircraft {
   readonly clMax: number;
   /** Maximum lift coefficient, full flap [-] */
   readonly clMaxFlaps?: number;
+  /** The engine, or absent for a glider */
+  readonly propulsion?: Propulsion;
 }
 
 /** Weight [N]. */
@@ -214,7 +217,7 @@ export function maxClHalfOverCd(aircraft: Aircraft): number {
   return Math.sqrt(cl) / cdFromCl(cl, aircraft.cd0, kf);
 }
 
-type LimitedField = keyof Omit<Aircraft, 'name'>;
+type LimitedField = keyof Omit<Aircraft, 'name' | 'propulsion'>;
 
 /**
  * Supported parameter ranges, inclusive.

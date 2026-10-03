@@ -20,7 +20,7 @@ const FT_PER_M = 1 / 0.3048;
 // --- Aircraft ---------------------------------------------------------------
 
 interface FieldSpec {
-  readonly key: Exclude<keyof Aircraft, 'name'>;
+  readonly key: Exclude<keyof Aircraft, 'name' | 'propulsion'>;
   readonly label: string;
   /** Converted by the unit system; plain coefficients have none */
   readonly quantity?: 'mass' | 'area';

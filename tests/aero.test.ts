@@ -227,16 +227,12 @@ describe('stall speed', () => {
   });
 });
 
-describe('known limits of the simple polar', () => {
-  it('overestimates the Cessna 172 glide ratio, as expected', () => {
-    // Published best glide is about 9:1. A constant-CD0 parabolic polar cannot
-    // capture fixed-gear interference drag, cooling drag, or the CL-dependence
-    // of parasite drag, so it reads high. This test pins the size of the known
-    // error rather than hiding it — if a future change moves it, that is a
-    // result worth noticing, not a test to quietly re-baseline.
-    const modelled = maxLiftToDrag(CESSNA_172S);
-    expect(modelled).toBeGreaterThan(9);
-    expect(modelled).toBeLessThan(12);
+describe('the 172S polar, calibrated to its POH glide', () => {
+  it('glides at the published 9:1', () => {
+    // CD0 and e were fitted to the POH best glide, 68 KIAS at 9:1. Before that
+    // calibration the estimated CD0 of 0.036 gave 10.9 and was pinned as a
+    // known error; see tests/references.test.ts for the full POH comparison.
+    expect(maxLiftToDrag(CESSNA_172S)).toBeCloseTo(9, 1);
   });
 });
 

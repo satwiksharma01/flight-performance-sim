@@ -87,7 +87,7 @@ export function App() {
     });
 
   /** Set an aircraft parameter, or remove an optional one (flap CLmax) with null. */
-  const editAircraft = (key: Exclude<keyof Aircraft, 'name'>, value: number | null) =>
+  const editAircraft = (key: Exclude<keyof Aircraft, 'name' | 'propulsion'>, value: number | null) =>
     update((s) => {
       const { clMaxFlaps: _flaps, ...withoutFlaps } = s.scenario.aircraft;
       const aircraft: Aircraft =
