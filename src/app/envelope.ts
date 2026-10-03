@@ -316,7 +316,11 @@ function energyGrid(
   const stallLine: Point[] = [];
   const bestClimb: Point[] = [];
   let peak = 0;
-  let heSpan = 0;
+  // The largest kinetic share of energy height on the chart [ft].
+  const tasMax = Math.max(
+    ...[0, yMax].flatMap((ft) => xs.map((xv) => axisToTas(xv, atPressureAltitude(ft * FT, deltaISA), view))),
+  );
+  const heSpan = (tasMax * tasMax) / (2 * G0) / FT;
 
   for (const yFt of ys) {
     const atm = atPressureAltitude(yFt * FT, deltaISA);
@@ -346,7 +350,6 @@ function energyGrid(
     peak = Math.max(peak, bestValue);
     if (bestHere) bestClimb.push(bestHere);
     if (vs < cap) stallLine.push([tasToAxis(vs, atm, view), yFt]);
-    heSpan = Math.max(heSpan, (heRow[heRow.length - 1] ?? 0) - yFt);
   }
 
   const step = niceStep(peak, 6);

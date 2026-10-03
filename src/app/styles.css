@@ -726,6 +726,10 @@ input[type='range'] {
   grid-column: 1 / -1;
 }
 
+.tables--even > :first-child {
+  grid-column: auto;
+}
+
 .table-card {
   padding: 14px 16px;
   display: grid;

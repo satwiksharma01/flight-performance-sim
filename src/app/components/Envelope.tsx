@@ -173,7 +173,7 @@ export function EnvelopeTab({ envelope, model, view, theme, onVnPick, onTurnPick
         )}
       </div>
 
-      <div className="tables">
+      <div className="tables tables--even">
         {vn && (
           <section className="card table-card" aria-labelledby="vn-h">
             <h3 id="vn-h">Structural limits</h3>

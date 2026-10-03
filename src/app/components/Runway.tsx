@@ -97,7 +97,7 @@ export function RunwayTab({ runway, view, theme, onAltitude }: Props) {
         )}
       </div>
 
-      <div className="tables">
+      <div className="tables tables--even">
         <section className="card table-card" aria-labelledby="to-h">
           <h3 id="to-h">Takeoff</h3>
           {takeoff.ok ? (
