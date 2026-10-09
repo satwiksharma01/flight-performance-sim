@@ -8,15 +8,22 @@
  *   structure is at its limit, n = q S CL_max / W. Above it the limit load
  *   factor caps the envelope, out to the design dive speed V_D. On the
  *   negative side the same holds with the negative stall, and the negative
- *   limit tapers linearly from V_C to zero at V_D (14 CFR 23.333(b)).
+ *   limit varies linearly from its value at V_C to 0 at V_D for the normal
+ *   and commuter categories, and to -1.0 at V_D for utility and aerobatic
+ *   (former 14 CFR 23.333(b)).
  * - Gust. A sharp-edged vertical gust of U_de adds
  *
  *     Δn = K_g ρ0 U_de V_e a / (2 W/S)
  *
- *   (14 CFR 23.341, the Pratt formula), where K_g = 0.88 μ / (5.3 + μ)
+ *   (former 14 CFR 23.341, the Pratt formula), where K_g = 0.88 μ / (5.3 + μ)
  *   alleviates it for the time the wing takes to penetrate the gust, and
  *   μ = 2 (W/S) / (ρ c a g) is the aeroplane's mass ratio. Design gusts are
- *   50 ft/s at V_C and 25 ft/s at V_D (14 CFR 23.333(c)).
+ *   50 ft/s at V_C and 25 ft/s at V_D (former 14 CFR 23.333(c)).
+ *
+ * "Former": Amendment 23-64 (2017) replaced Part 23's prescriptive load rules
+ * with performance-based ones, accepting industry standards (ASTM F3116) as
+ * the means of compliance. The classic rules cited here are the ones every
+ * light aircraft flying today, the 172S included, was certificated to.
  *
  * In EAS the manoeuvre boundary doesn't depend on altitude: q is fixed by the
  * EAS. The gust boundary does, a little, through μ.
@@ -29,6 +36,10 @@
 import { G0, RHO0 } from '../constants.js';
 import { weight, type Aircraft } from '../aero.js';
 
+/** Certification category. Absent means normal (commuter follows the same rule). */
+export type Category = 'normal' | 'utility' | 'aerobatic';
+export const CATEGORIES: readonly Category[] = ['normal', 'utility', 'aerobatic'];
+
 export interface StructuralLimits {
   /** Positive limit load factor, flaps up [-]: 3.8 normal, 4.4 utility, 6 aerobatic category */
   readonly nPositive: number;
@@ -36,11 +47,21 @@ export interface StructuralLimits {
   readonly nNegative: number;
   /** Design cruising speed V_C [m/s EAS] */
   readonly cruiseSpeed: number;
-  /** Design dive speed V_D [m/s EAS]. The never-exceed speed is 0.9 V_D (14 CFR 23.1505) */
+  /** Design dive speed V_D [m/s EAS]. The never-exceed speed is 0.9 V_D (former 14 CFR 23.1505) */
   readonly diveSpeed: number;
   /** Lift coefficient at the negative stall, clean [-], below zero */
   readonly clMin: number;
+  /** Sets the negative limit at V_D: 0 for normal, -1.0 for utility and aerobatic */
+  readonly category?: Category;
 }
+
+/** The negative manoeuvre limit at V_D, by category (former 14 CFR 23.333(b)(3)). */
+export function negativeLimitAtDive(limits: StructuralLimits): number {
+  return (limits.category ?? 'normal') === 'normal' ? 0 : -1;
+}
+
+/** The numeric limits, which have ranges. */
+export type NumericLimit = Exclude<keyof StructuralLimits, 'category'>;
 
 /** Supported ranges, inclusive, for the permalink decoder and the editor. */
 export const STRUCTURE_LIMITS = {
@@ -55,8 +76,11 @@ export const STRUCTURE_LIMITS = {
 export function validateStructure(s: StructuralLimits): string[] {
   const problems: string[] = [];
   for (const [field, { label, min, max }] of Object.entries(STRUCTURE_LIMITS)) {
-    const value = s[field as keyof StructuralLimits];
+    const value = s[field as NumericLimit];
     if (!(value >= min && value <= max)) problems.push(`${label} must lie between ${min} and ${max}.`);
+  }
+  if (s.category !== undefined && !CATEGORIES.includes(s.category)) {
+    problems.push(`Unknown category "${s.category}". Expected one of: ${CATEGORIES.join(', ')}.`);
   }
   if (problems.length === 0 && !(s.diveSpeed > s.cruiseSpeed)) {
     problems.push('The design dive speed must be faster than the design cruising speed.');
@@ -175,7 +199,8 @@ export function vnBoundaries(d: VnDiagram, eas: number): VnBoundaries | null {
 
   const stallUp = d.positiveStallCoefficient * eas * eas;
   const stallDown = d.negativeStallCoefficient * eas * eas;
-  const taper = eas <= vc ? nNegative : (nNegative * (vd - eas)) / (vd - vc);
+  const atDive = negativeLimitAtDive(d.limits);
+  const taper = eas <= vc ? nNegative : nNegative + ((atDive - nNegative) * (eas - vc)) / (vd - vc);
   const maneuver = { upper: Math.min(stallUp, nPositive), lower: Math.max(stallDown, taper) };
 
   // Δn at V_C on the V_C gust, and at V_D on the V_D gust, joined by a straight line.

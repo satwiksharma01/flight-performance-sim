@@ -25,7 +25,14 @@ import {
   type Propulsion,
 } from '../physics/propulsion.js';
 import { ISA_CEILING } from '../physics/constants.js';
-import { STRUCTURE_LIMITS, validateStructure, type StructuralLimits } from '../physics/performance/vn.js';
+import {
+  CATEGORIES,
+  STRUCTURE_LIMITS,
+  validateStructure,
+  type Category,
+  type NumericLimit,
+  type StructuralLimits,
+} from '../physics/performance/vn.js';
 import { isSurfaceId, type SurfaceId } from '../physics/performance/field.js';
 import { CESSNA_172S, PRESET_IDS, getPreset } from '../data/aircraft/presets.js';
 
@@ -120,13 +127,14 @@ const KEY = {
   cruiseSpeed: 'vc',
   diveSpeed: 'vd',
   clMin: 'clneg',
+  category: 'cat',
   // The runway.
   surface: 'rw',
   headwind: 'hw',
 } as const;
 
 /** Structural limits by their query-string key. */
-const STRUCTURE_KEYS: readonly (readonly [string, keyof StructuralLimits])[] = [
+const STRUCTURE_KEYS: readonly (readonly [string, NumericLimit])[] = [
   [KEY.nPositive, 'nPositive'],
   [KEY.nNegative, 'nNegative'],
   [KEY.cruiseSpeed, 'cruiseSpeed'],
@@ -194,7 +202,7 @@ function samePropulsion(a: Propulsion | undefined, b: Propulsion | undefined): b
 
 function sameStructure(a: StructuralLimits | undefined, b: StructuralLimits | undefined): boolean {
   if (a === undefined || b === undefined) return a === b;
-  return STRUCTURE_KEYS.every(([, field]) => sameNumber(a[field], b[field]));
+  return (a.category ?? 'normal') === (b.category ?? 'normal') && STRUCTURE_KEYS.every(([, field]) => sameNumber(a[field], b[field]));
 }
 
 function sameAircraft(a: Aircraft, b: Aircraft): boolean {
@@ -260,6 +268,8 @@ export function encodeScenario(scenario: Scenario): string {
       params.set(KEY.structure, 'none');
     } else {
       for (const [key, field] of STRUCTURE_KEYS) params.set(key, formatNumber(ac.structure[field]));
+      // Always said, so a link that changes the category back to normal keeps it.
+      params.set(KEY.category, ac.structure.category ?? 'normal');
     }
   }
   // An engine that differs from the preset's is written out whole: it's short,
@@ -429,7 +439,7 @@ function readEngine(params: URLSearchParams, aircraft: Aircraft, problems: strin
 /** Structural limits: the base's, overridden key by key, removed by str=none. */
 function readStructure(params: URLSearchParams, aircraft: Aircraft, problems: string[]): Aircraft {
   const marker = params.get(KEY.structure);
-  const values: Partial<Record<keyof StructuralLimits, number>> = {};
+  const values: Partial<Record<NumericLimit, number>> = {};
   for (const [key, field] of STRUCTURE_KEYS) {
     const { label, min, max } = STRUCTURE_LIMITS[field];
     const value = readNumber(params, key, label, problems, { min, max });
@@ -443,13 +453,25 @@ function readStructure(params: URLSearchParams, aircraft: Aircraft, problems: st
     const { structure: _none, ...rest } = aircraft;
     return rest;
   }
-  if (given === 0) return aircraft;
+  const rawCategory = params.get(KEY.category);
+  if (given === 0 && rawCategory === null) return aircraft;
 
   if (!aircraft.structure && given < STRUCTURE_KEYS.length) {
     problems.push('Structural limits need all five values (nmax, nmin, vc, vd, clneg); ignored.');
     return aircraft;
   }
-  const structure = { ...aircraft.structure, ...values } as StructuralLimits;
+  // Absent means normal.
+  let category: Category | undefined = aircraft.structure?.category;
+  if (rawCategory !== null) {
+    if ((CATEGORIES as readonly string[]).includes(rawCategory)) category = rawCategory as Category;
+    else problems.push(`Unknown category "${rawCategory}". Expected one of: ${CATEGORIES.join(', ')}.`);
+  }
+  const { category: _previous, ...base } = aircraft.structure ?? {};
+  const structure = {
+    ...base,
+    ...values,
+    ...(category !== undefined && category !== 'normal' ? { category } : {}),
+  } as StructuralLimits;
   const invalid = validateStructure(structure);
   if (invalid.length > 0) {
     problems.push(...invalid.map((p) => `${p} The structural limits were ignored.`));

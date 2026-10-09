@@ -265,7 +265,9 @@ def vn_reference(ac, hp, rho):
     uc, ud = 50 * FT * scale, 25 * FT * scale
     gust_up = ([0, vc, vd], [1, 1 + dn(uc, vc), 1 + dn(ud, vd)])
     gust_dn = ([0, vc, vd], [1, 1 - dn(uc, vc), 1 - dn(ud, vd)])
-    taper = ([0, vc, vd], [lim["nNegative"], lim["nNegative"], 0])
+    # Negative limit at V_D: 0 for normal category, -1.0 for utility and aerobatic.
+    at_dive = 0.0 if lim.get("category", "normal") == "normal" else -1.0
+    taper = ([0, vc, vd], [lim["nNegative"], lim["nNegative"], at_dive])
 
     def at(v):
         up_m = min(n_stall(v, ac["clMax"]), lim["nPositive"])

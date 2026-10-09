@@ -50,7 +50,8 @@ cross-check on every push, and deploys to GitHub Pages when they pass. See [ROAD
     editable.
 - **Glide, power off:** best glide ratio and speed, minimum sink, and distance from
   the current altitude. For a glider the rate-of-climb chart becomes the glider polar.
-- **The V-n diagram,** in EAS: stall curves, limit load factors, the 14 CFR 23.341
+- **The V-n diagram,** in EAS: stall curves, limit load factors (negative limit at
+  V_D by certification category), the former 14 CFR 23.341
   gust lines with the Pratt alleviation factor, and the design envelope, with
   `V_S`, `V_A`, `V_C`, `V_NE` and `V_D`. The current speed and bank are a point on it,
   inside or outside.
@@ -162,7 +163,7 @@ npm run build        # static site in dist/, relative paths, any host
 | `src/physics/aero.ts` | Parabolic drag polar, stall speed, and closed-form characteristic speeds |
 | `src/physics/performance/curves.ts` | Drag, thrust required, power required and L/D curves, with characteristic-speed markers at any load factor |
 | `src/physics/performance/turn.ts` | Level-turn load factor, radius and rate; lift-limited and sustained load factor, corner speed |
-| `src/physics/performance/vn.ts` | The V-n diagram: manoeuvre envelope, 14 CFR 23.341 gust lines, design envelope |
+| `src/physics/performance/vn.ts` | The V-n diagram: manoeuvre envelope by category, former 14 CFR 23.341 gust lines, design envelope |
 | `src/physics/performance/energy.ts` | Specific excess power at any load factor, and energy height |
 | `src/physics/performance/range.ts` | Breguet range and endurance, all four cases, and the payload–range diagram |
 | `src/physics/performance/field.ts` | Takeoff and landing over 50 ft by Raymer's method, ground runs integrated exactly; runway friction for seven surfaces |
@@ -266,7 +267,7 @@ a fixed-pitch propeller does.
 - Hull, *Fundamentals of Airplane Flight Mechanics* — climb and cruise formulations
 - Raymer, *Aircraft Design: A Conceptual Approach*, §17.8–17.9 — takeoff and landing
 - Gudmundsson, *General Aviation Aircraft Design* (2014) — runway friction coefficients
-- 14 CFR Part 23 (§23.333, §23.335, §23.341, §23.1505) — the V-n diagram, gusts and V_NE
+- 14 CFR Part 23 before Amendment 23-64 (2017) (§23.333, §23.335, §23.341, §23.1505) — the V-n diagram, gusts and V_NE. The current Part 23 is performance-based and accepts ASTM F3116 for these loads; the classic rules are what today's light aircraft were certificated to
 
 Aircraft parameters in `src/data/aircraft/` are simplified representative figures for
 education, not certification data.

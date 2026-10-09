@@ -13,6 +13,9 @@ import {
   SURFACE_IDS,
   weight,
   type Aircraft,
+  CATEGORIES,
+  type Category,
+  type NumericLimit,
   type StructuralLimits,
   type SurfaceId,
   type EngineKind,
@@ -134,7 +137,7 @@ function aircraftFields(system: UnitSystem): readonly (FieldDef & { readonly key
 }
 
 /** Structural limits, speeds in knots EAS. */
-function structureFields(): readonly (FieldDef & { readonly key: keyof StructuralLimits })[] {
+function structureFields(): readonly (FieldDef & { readonly key: NumericLimit })[] {
   const L = STRUCTURE_LIMITS;
   const kt = { unit: 'KEAS', toDisplay: (v: number) => v / MPS_PER_KT, fromDisplay: (v: number) => v * MPS_PER_KT };
   return [
@@ -148,7 +151,7 @@ function structureFields(): readonly (FieldDef & { readonly key: keyof Structura
 
 /**
  * Starting limits for an aircraft that has none: normal category, with V_C at
- * the 14 CFR 23.335 minimum, 33 sqrt(W/S) knots (W/S in lb/ft²), and V_D at
+ * the former 14 CFR 23.335 minimum, 33 sqrt(W/S) knots (W/S in lb/ft²), and V_D at
  * 1.4 V_C. For the 172S that gives V_C = 126 kt, its published V_NO.
  */
 export function defaultStructure(aircraft: Aircraft): StructuralLimits {
@@ -429,6 +432,28 @@ function StructureEditor({
           <option value="set">Set</option>
         </select>
       </div>
+      {structure && (
+        <div className="field">
+          <label htmlFor={`${id}-cat`} title="Sets the negative limit at V_D: 0 for normal, −1.0 for utility and aerobatic.">
+            Category
+          </label>
+          <select
+            id={`${id}-cat`}
+            value={structure.category ?? 'normal'}
+            onChange={(e) => {
+              const { category: _previous, ...rest } = structure;
+              const category = e.target.value as Category;
+              onChange(category === 'normal' ? rest : { ...rest, category });
+            }}
+          >
+            {CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {c[0]!.toUpperCase() + c.slice(1)}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       {structure && (
         <div className="fields">
           {structureFields().map((def) => (

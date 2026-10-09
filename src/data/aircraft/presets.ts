@@ -55,8 +55,8 @@ export const CESSNA_172S: Aircraft = {
   },
   emptyMass: 1663 * 0.45359237, // POH standard empty weight
   fuelCapacity: 53 * 6 * 0.45359237, // 53 gal usable avgas at 6 lb/gal
-  // Normal category, POH section 2. V_C is taken as V_NO, the least 14 CFR
-  // 23.1505 allows, and V_D as V_NE / 0.9, so V_NE comes out at the published
+  // Normal category, POH section 2. V_C is taken as V_NO, the least the
+  // former 14 CFR 23.1505 allows, and V_D as V_NE / 0.9, so V_NE comes out at the published
   // 160 KCAS. The negative-stall CL isn't published: about -1.1 for the
   // NACA 2412 section, taken as -1.0 for the wing. At these speeds, at sea
   // level, CAS and EAS are the same.
@@ -85,7 +85,7 @@ export const GENERIC_JET_TRAINER: Aircraft = {
   emptyMass: 2800,
   fuelCapacity: 1200,
   // Aerobatic-trainer limits, V_D = 1.25 V_C.
-  structure: { nPositive: 7, nNegative: -3.5, cruiseSpeed: 300 * KT, diveSpeed: 375 * KT, clMin: -0.9 },
+  structure: { nPositive: 7, nNegative: -3.5, cruiseSpeed: 300 * KT, diveSpeed: 375 * KT, clMin: -0.9, category: 'aerobatic' },
 };
 
 export const GENERIC_SAILPLANE: Aircraft = {
@@ -98,7 +98,7 @@ export const GENERIC_SAILPLANE: Aircraft = {
   clMax: 1.5,
   // Utility category in the manner of CS-22: V_NE 135 kt, so V_D 150 kt, with
   // the rough-air speed as V_C.
-  structure: { nPositive: 5.3, nNegative: -2.65, cruiseSpeed: 97 * KT, diveSpeed: 150 * KT, clMin: -0.8 },
+  structure: { nPositive: 5.3, nNegative: -2.65, cruiseSpeed: 97 * KT, diveSpeed: 150 * KT, clMin: -0.8, category: 'utility' },
 };
 
 /**

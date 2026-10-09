@@ -254,6 +254,18 @@ describe('structural limits, takeoff flap and runway', () => {
     expect(scenario.aircraft.structure).toEqual(custom.aircraft.structure);
   });
 
+  it('keeps the certification category, and reports an unknown one', () => {
+    const { scenario, problems } = decodeScenario('ac=jet-trainer');
+    expect(problems).toEqual([]);
+    expect(scenario.aircraft.structure?.category).toBe('aerobatic');
+    const normal = decodeScenario('ac=jet-trainer&nmax=7&nmin=-3.5&vc=154.33333&vd=192.91667&clneg=-0.9&cat=normal');
+    expect(normal.scenario.aircraft.structure?.category).toBeUndefined();
+    expect(normal.scenario.presetId).toBeNull();
+    expect(decodeScenario('ac=jet-trainer&cat=fighter').problems).toHaveLength(1);
+    const back = decodeScenario(encodeScenario(normal.scenario.presetId === null ? { ...normal.scenario, presetId: 'jet-trainer' } : normal.scenario));
+    expect(back.scenario.aircraft.structure?.category).toBeUndefined();
+  });
+
   it('removes a preset’s limits with str=none, and its takeoff flap with clto=none', () => {
     const { scenario, problems } = decodeScenario('ac=c172&str=none&clto=none');
     expect(problems).toEqual([]);

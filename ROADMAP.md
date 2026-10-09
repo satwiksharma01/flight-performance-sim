@@ -353,7 +353,8 @@ curve move. A complete product at a tiny scope.
       `npm run validate`*
 
 ### v0.5 — Envelope and maneuver *(the "wow" release)*
-- [x] V-n diagram — *manoeuvre envelope, 14 CFR 23.341 gust lines, design envelope;
+- [x] V-n diagram — *manoeuvre envelope (negative limit at V_D by category), former
+      14 CFR 23.341 gust lines, design envelope;
       172S limits from its POH, `V_A` checked at three weights*
 - [x] Turn performance — *instantaneous and sustained turn rate (the doghouse),
       corner speed, constant-radius lines*

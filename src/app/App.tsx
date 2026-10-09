@@ -579,7 +579,7 @@ export function App() {
           Aircraft figures are simplified and representative, for education, not certification data. References: ISO
           2533 / US Standard Atmosphere 1976; Anderson, <em>Aircraft Performance and Design</em>; Hull,{' '}
           <em>Fundamentals of Airplane Flight Mechanics</em>; Raymer, <em>Aircraft Design</em>; Gudmundsson,{' '}
-          <em>General Aviation Aircraft Design</em>; 14 CFR Part 23.
+          <em>General Aviation Aircraft Design</em>; 14 CFR Part 23 before Amendment 23-64.
         </p>
       </footer>
     </div>

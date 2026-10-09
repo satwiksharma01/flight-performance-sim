@@ -99,6 +99,16 @@ describe('V-n diagram, Cessna 172S', () => {
     expect(vnBoundaries(diagram, limits.diveSpeed)?.maneuver.lower).toBeCloseTo(0, 12);
   });
 
+  it('tapers to -1.0 at V_D for the utility and aerobatic categories', () => {
+    const jet = PRESETS['jet-trainer'];
+    const d = vnDiagram(jet, jet.structure!, 0, sl.density);
+    expect(vnBoundaries(d, jet.structure!.diveSpeed)?.maneuver.lower).toBeCloseTo(-1, 12);
+    const mid = 0.5 * (jet.structure!.cruiseSpeed + jet.structure!.diveSpeed);
+    expect(vnBoundaries(d, mid)?.maneuver.lower).toBeCloseTo((-3.5 - 1) / 2, 12);
+    const utility = vnDiagram(c172, { ...limits, category: 'utility' }, 0, sl.density);
+    expect(vnBoundaries(utility, limits.diveSpeed)?.maneuver.lower).toBeCloseTo(-1, 12);
+  });
+
   it('ends at V_D', () => {
     expect(vnBoundaries(diagram, limits.diveSpeed * 1.0001)).toBeNull();
     expect(vnBoundaries(diagram, -1)).toBeNull();
