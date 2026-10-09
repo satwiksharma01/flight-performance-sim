@@ -63,6 +63,10 @@ cross-check on every push, and deploys to GitHub Pages when they pass. See [ROAD
   on the current ISA day, each split into its phases, on seven runway surfaces with a
   head- or tailwind. For the stock 172S the POH's own tables are drawn over the
   curves.
+- **Range and endurance** by the Breguet equations, in all four cases: a propeller
+  flies best range at `V_md` and best endurance at `V_mp`, a jet at `V_jr` and
+  `V_md`. A **payload–range diagram** shows the trade from full payload to ferry
+  range. Fuel capacity, empty mass and SFC are editable.
 - **SI or US units** for force, power, weight and area: N, kW and kg, or lbf, hp
   and lb.
 - **Every scenario is a link.** `?ac=c172&h=2438.4&disa=15` is a Cessna at
@@ -139,7 +143,7 @@ What the 172S comparison says, in brief:
 ```bash
 npm install
 npm run dev          # the explorer at http://localhost:5173, validation at /validation.html
-npm test             # 336 tests
+npm test             # 355 tests
 npm run validate     # cross-check against the independent Python reference (needs SciPy)
 npm run typecheck
 npm run build        # static site in dist/, relative paths, any host
@@ -158,6 +162,7 @@ npm run build        # static site in dist/, relative paths, any host
 | `src/physics/performance/turn.ts` | Level-turn load factor, radius and rate; lift-limited and sustained load factor, corner speed |
 | `src/physics/performance/vn.ts` | The V-n diagram: manoeuvre envelope, 14 CFR 23.341 gust lines, design envelope |
 | `src/physics/performance/energy.ts` | Specific excess power at any load factor, and energy height |
+| `src/physics/performance/range.ts` | Breguet range and endurance, all four cases, and the payload–range diagram |
 | `src/physics/performance/field.ts` | Takeoff and landing over 50 ft by Raymer's method, ground runs integrated exactly; runway friction for seven surfaces |
 | `src/physics/propulsion.ts` | Piston (Gagg–Farrar with the hot-day correction, turbocharged), turboprop and turbofan lapse; propeller thrust that is finite at zero speed |
 | `src/physics/performance/climb.ts` | Exact steady climb and the small-angle form; V_y, V_x, maximum level speed; absolute and service ceilings |
@@ -170,7 +175,7 @@ npm run build        # static site in dist/, relative paths, any host
 | `src/data/validation/` | The validation dataset, the POH tables, and the cross-check's last run |
 | `src/app/components/` | React controls, readouts, and the uPlot chart with its marker overlays |
 
-336 tests, covering the published ISA table at five altitudes, layer continuity,
+355 tests, covering the published ISA table at five altitudes, layer continuity,
 profile inversion, every closed-form optimum cross-checked against a brute-force
 scan, permalink round-trip stability, and the chart model's physics: the drag curve
 is identical against EAS at every altitude and slides right by `sqrt(ρ₀/ρ)` against

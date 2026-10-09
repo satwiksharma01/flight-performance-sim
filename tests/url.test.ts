@@ -6,6 +6,7 @@ import {
   type Scenario,
 } from '../src/state/url.js';
 import { CESSNA_172S, GENERIC_SAILPLANE } from '../src/data/aircraft/presets.js';
+import type { PistonEngine } from '../src/physics/propulsion.js';
 
 describe('encoding', () => {
   it('reduces an unmodified preset to a single parameter', () => {
@@ -266,7 +267,7 @@ describe('structural limits, takeoff flap and runway', () => {
     const scenario: Scenario = {
       ...DEFAULT_SCENARIO,
       presetId: null,
-      aircraft: { ...bare, name: 'Bare', mass: 1150, wingArea: 16.2, propulsion: { kind: 'turbofan', thrust: 3000, lapseExponent: 0.8 } },
+      aircraft: { ...bare, name: 'Bare', mass: 1150, wingArea: 16.2, propulsion: { kind: 'turbofan', thrust: 3000, lapseExponent: 0.8, sfc: 2e-5 } },
     };
     const decoded = decodeScenario(encodeScenario(scenario));
     expect(decoded.problems).toEqual([]);
@@ -277,6 +278,20 @@ describe('structural limits, takeoff flap and runway', () => {
     expect(decodeScenario('ac=jet-trainer&str=none&nmax=4').problems).toHaveLength(1);
     expect(decodeScenario('ac=sailplane&vd=20').problems).toHaveLength(1);
     expect(decodeScenario('ac=sailplane&vd=20').scenario.aircraft.structure).toEqual(GENERIC_SAILPLANE.structure);
+  });
+
+  it('round-trips fuel data and SFC, and removes fuel with fuel=none', () => {
+    const scenario: Scenario = {
+      ...DEFAULT_SCENARIO,
+      presetId: null,
+      aircraft: { ...CESSNA_172S, name: 'Long range', fuelCapacity: 200, emptyMass: 700, propulsion: { ...(CESSNA_172S.propulsion as PistonEngine), power: 134000, sfc: 8e-8 } },
+    };
+    const decoded = decodeScenario(encodeScenario({ ...scenario, presetId: 'c172' }));
+    expect(decoded.problems).toEqual([]);
+    expect(decoded.scenario.aircraft).toEqual(scenario.aircraft);
+    expect(decodeScenario('ac=c172&fuel=none').scenario.aircraft.fuelCapacity).toBeUndefined();
+    expect(decodeScenario('ac=c172&oew=2000').problems).toHaveLength(1); // not below MTOW
+    expect(decodeScenario('ac=c172&sfc=1').problems).toHaveLength(1); // out of range
   });
 
   it('keeps the runway surface and wind, and drops the defaults', () => {

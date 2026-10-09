@@ -46,6 +46,8 @@ export interface PistonEngine {
   /** Turbocharged: full power up to this pressure altitude [m]. Absent: normally aspirated */
   readonly criticalAltitude?: number;
   readonly propeller: Propeller;
+  /** Brake specific fuel consumption [kg/(W s)]. Absent: no range */
+  readonly sfc?: number;
 }
 
 export interface TurbopropEngine {
@@ -55,6 +57,8 @@ export interface TurbopropEngine {
   /** m in P/P0 = sigma^m [-] */
   readonly lapseExponent: number;
   readonly propeller: Propeller;
+  /** Brake specific fuel consumption [kg/(W s)]. Absent: no range */
+  readonly sfc?: number;
 }
 
 export interface TurbofanEngine {
@@ -63,7 +67,13 @@ export interface TurbofanEngine {
   readonly thrust: number;
   /** m in T/T0 = sigma^m [-] */
   readonly lapseExponent: number;
+  /** Thrust specific fuel consumption [kg/(N s)]. Absent: no range */
+  readonly sfc?: number;
 }
+
+/** 1 lb/(hp h) and 1 lb/(lbf h), in kg/(W s) and kg/(N s). */
+export const BSFC_LB_PER_HP_H = 0.45359237 / (745.699872 * 3600);
+export const TSFC_LB_PER_LBF_H = 1 / 3600 / 9.80665;
 
 export type Propulsion = PistonEngine | TurbopropEngine | TurbofanEngine;
 
@@ -131,18 +141,22 @@ export const PROPULSION_LIMITS = {
   criticalAltitude: { label: 'Critical altitude', min: 0, max: 15_000 },
   staticThrust: { label: 'Static thrust', min: 10, max: 200_000 },
   zeroThrustSpeed: { label: 'Zero-thrust speed', min: 20, max: 400 },
+  // 0.1 to 2 lb/(hp h) brake; 0.1 to 3 lb/(lbf h) thrust
+  bsfc: { label: 'Specific fuel consumption', min: 0.1 * BSFC_LB_PER_HP_H, max: 2 * BSFC_LB_PER_HP_H },
+  tsfc: { label: 'Specific fuel consumption', min: 0.1 * TSFC_LB_PER_LBF_H, max: 3 * TSFC_LB_PER_LBF_H },
 } as const;
 
 /** A starting point for each engine kind, used when the kind is switched. */
 export const DEFAULT_ENGINES: Record<EngineKind, Propulsion> = {
-  piston: { kind: 'piston', power: 134_000, propeller: { staticThrust: 3000, zeroThrustSpeed: 170 } },
+  piston: { kind: 'piston', power: 134_000, propeller: { staticThrust: 3000, zeroThrustSpeed: 170 }, sfc: 0.45 * BSFC_LB_PER_HP_H },
   turboprop: {
     kind: 'turboprop',
     power: 500_000,
     lapseExponent: 0.75,
     propeller: { staticThrust: 9000, zeroThrustSpeed: 200 },
+    sfc: 0.55 * BSFC_LB_PER_HP_H,
   },
-  turbofan: { kind: 'turbofan', thrust: 14_000, lapseExponent: 1 },
+  turbofan: { kind: 'turbofan', thrust: 14_000, lapseExponent: 1, sfc: 0.75 * TSFC_LB_PER_LBF_H },
 };
 
 /** Propeller efficiency implied at this speed [-]: T V / P. Null for a jet. */

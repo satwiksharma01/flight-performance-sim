@@ -97,6 +97,8 @@ const KEY = {
   clMax: 'clmax',
   clMaxFlaps: 'clf',
   clMaxTakeoff: 'clto',
+  emptyMass: 'oew',
+  fuelCapacity: 'fuel',
   altitude: 'h',
   deltaISA: 'disa',
   tas: 'v',
@@ -110,6 +112,7 @@ const KEY = {
   criticalAltitude: 'hc',
   staticThrust: 'ts',
   zeroThrustSpeed: 'v0',
+  sfc: 'sfc',
   // Structural limits for the V-n diagram. str=none removes a preset's.
   structure: 'str',
   nPositive: 'nmax',
@@ -156,6 +159,10 @@ function sameNumber(a: number | undefined, b: number | undefined): boolean {
 
 /** The numbers that define an engine, keyed by their query-string key. */
 function engineFields(p: Propulsion): Record<string, number> {
+  return { ...kindFields(p), ...(p.sfc === undefined ? {} : { [KEY.sfc]: p.sfc }) };
+}
+
+function kindFields(p: Propulsion): Record<string, number> {
   switch (p.kind) {
     case 'piston':
       return {
@@ -195,6 +202,8 @@ function sameAircraft(a: Aircraft, b: Aircraft): boolean {
     samePropulsion(a.propulsion, b.propulsion) &&
     sameStructure(a.structure, b.structure) &&
     sameNumber(a.clMaxTakeoff, b.clMaxTakeoff) &&
+    sameNumber(a.emptyMass, b.emptyMass) &&
+    sameNumber(a.fuelCapacity, b.fuelCapacity) &&
     a.name === b.name &&
     sameNumber(a.mass, b.mass) &&
     sameNumber(a.wingArea, b.wingArea) &&
@@ -239,6 +248,8 @@ export function encodeScenario(scenario: Scenario): string {
   for (const [key, field] of [
     [KEY.clMaxFlaps, 'clMaxFlaps'],
     [KEY.clMaxTakeoff, 'clMaxTakeoff'],
+    [KEY.emptyMass, 'emptyMass'],
+    [KEY.fuelCapacity, 'fuelCapacity'],
   ] as const) {
     const value = ac[field];
     if (!sameNumber(value, start[field])) params.set(key, value === undefined ? 'none' : formatNumber(value));
@@ -367,6 +378,7 @@ function readEngine(params: URLSearchParams, aircraft: Aircraft, problems: strin
   const critical = read(KEY.criticalAltitude, L.criticalAltitude);
   const staticThrust = read(KEY.staticThrust, L.staticThrust);
   const zeroSpeed = read(KEY.zeroThrustSpeed, L.zeroThrustSpeed);
+  const sfc = read(KEY.sfc, engine?.kind === 'turbofan' ? L.tsfc : L.bsfc);
 
   const unused = (value: number | undefined, label: string) => {
     if (value === undefined) return;
@@ -381,6 +393,7 @@ function readEngine(params: URLSearchParams, aircraft: Aircraft, problems: strin
     unused(critical, L.criticalAltitude.label);
     unused(staticThrust, L.staticThrust.label);
     unused(zeroSpeed, L.zeroThrustSpeed.label);
+    unused(sfc, L.bsfc.label);
     const { propulsion: _none, ...glider } = aircraft;
     return glider;
   }
@@ -410,7 +423,7 @@ function readEngine(params: URLSearchParams, aircraft: Aircraft, problems: strin
       };
     }
   }
-  return { ...aircraft, propulsion: engine };
+  return { ...aircraft, propulsion: sfc === undefined ? engine : { ...engine, sfc } };
 }
 
 /** Structural limits: the base's, overridden key by key, removed by str=none. */
@@ -449,7 +462,7 @@ function readStructure(params: URLSearchParams, aircraft: Aircraft, problems: st
 function readOptional(
   params: URLSearchParams,
   key: string,
-  field: 'clMaxFlaps' | 'clMaxTakeoff',
+  field: 'clMaxFlaps' | 'clMaxTakeoff' | 'emptyMass' | 'fuelCapacity',
   aircraft: Aircraft,
   problems: string[],
 ): Aircraft {
@@ -520,6 +533,8 @@ export function decodeScenario(query: string): DecodeResult {
 
   aircraft = readOptional(params, KEY.clMaxFlaps, 'clMaxFlaps', aircraft, problems);
   aircraft = readOptional(params, KEY.clMaxTakeoff, 'clMaxTakeoff', aircraft, problems);
+  aircraft = readOptional(params, KEY.emptyMass, 'emptyMass', aircraft, problems);
+  aircraft = readOptional(params, KEY.fuelCapacity, 'fuelCapacity', aircraft, problems);
 
   aircraft = readEngine(params, aircraft, problems);
   aircraft = readStructure(params, aircraft, problems);

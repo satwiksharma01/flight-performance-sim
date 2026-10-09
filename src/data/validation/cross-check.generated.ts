@@ -2,10 +2,10 @@
 // The /validation page shows it as the last recorded run; CI re-runs the check on every push.
 
 export const CROSS_CHECK = {
-  ranOn: "2026-10-04",
+  ranOn: "2026-10-10",
   python: "3.13.2",
   scipy: "1.16.2",
-  sweep: "57 atmospheres x 5 airspeeds, 9 polar cases, 20 climb and glide cases, 8 ceiling pairs, 6 V-n diagrams, 10 turn cases, 90 takeoff and landing cases",
+  sweep: "57 atmospheres x 5 airspeeds, 9 polar cases, 20 climb and glide cases, 8 ceiling pairs, 6 V-n diagrams, 10 turn cases, 90 takeoff and landing cases, 6 range and endurance cases",
   checks: [
     { quantity: "T", worst: 0.0, limit: 1e-12, where: "", pass: true },
     { quantity: "p", worst: 2.090656413356123e-16, limit: 1e-12, where: "h=84000 m, dISA=-20", pass: true },
@@ -43,5 +43,7 @@ export const CROSS_CHECK = {
     { quantity: "specific excess power", worst: 9.880984919163893e-15, limit: 1e-12, where: "jet-trainer at Hp 3000 m, dISA 15, V 120, n 2.5", pass: true },
     { quantity: "takeoff distances", worst: 1.3267417629855275e-11, limit: 1e-07, where: "turbo-piston at Hp 2500 m, dISA -10, wind -2.5, mu 0.07, groundRoll", pass: true },
     { quantity: "landing distances", worst: 7.930942320681863e-08, limit: 1e-07, where: "sailplane at Hp 1500 m, dISA 20, wind 0, mu 0.04, groundRoll", pass: true },
+    { quantity: "Breguet range", worst: 8.76416067469711e-16, limit: 1e-10, where: "jet-trainer at 3000 m", pass: true },
+    { quantity: "Breguet endurance", worst: 3.4164169761785553e-16, limit: 1e-10, where: "c172 at 9000 m", pass: true },
   ],
 } as const;

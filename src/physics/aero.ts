@@ -36,6 +36,10 @@ export interface Aircraft {
   readonly propulsion?: Propulsion;
   /** Limit load factors and design speeds, for the V-n diagram. Absent: none drawn */
   readonly structure?: StructuralLimits;
+  /** Empty mass, without fuel or payload [kg]. With fuelCapacity, enables range */
+  readonly emptyMass?: number;
+  /** Usable fuel [kg] */
+  readonly fuelCapacity?: number;
 }
 
 /** Weight [N]. */
@@ -241,6 +245,8 @@ export const AIRCRAFT_LIMITS: Record<LimitedField, { readonly label: string; rea
   clMax: { label: 'CLmax', min: 0.05, max: 5 },
   clMaxFlaps: { label: 'CLmax with flaps', min: 0.05, max: 6 },
   clMaxTakeoff: { label: 'CLmax, takeoff flap', min: 0.05, max: 6 },
+  emptyMass: { label: 'Empty mass', min: 0.05, max: 1e6 },
+  fuelCapacity: { label: 'Fuel capacity', min: 0.01, max: 5e5 },
 };
 
 /** Validate an aircraft definition, returning one human-readable problem per bad field. */
@@ -251,6 +257,9 @@ export function validateAircraft(aircraft: Aircraft): string[] {
     if (value === undefined) continue;
     if (!(value > 0)) problems.push(`${label} must be greater than zero.`);
     else if (value < min || value > max) problems.push(`${label} must lie between ${min} and ${max}.`);
+  }
+  if (aircraft.emptyMass !== undefined && !(aircraft.emptyMass < aircraft.mass)) {
+    problems.push('Empty mass must be less than the max takeoff mass.');
   }
   return problems;
 }

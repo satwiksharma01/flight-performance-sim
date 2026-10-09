@@ -24,6 +24,7 @@ import {
 } from './model.js';
 import { buildEnvelopeModel, loadFactorForTurnRate } from './envelope.js';
 import { buildRunwayModel } from './runway.js';
+import { buildCruiseModel } from './cruise.js';
 import { canonicalize, readPermalink, writePermalink, type Permalink } from './permalink.js';
 import { axisLabel, axisTick, num, tick } from './format.js';
 import { Chart, type ChartBand, type ChartMarker } from './components/Chart.js';
@@ -31,11 +32,13 @@ import { AircraftPanel, ConditionPanel, RunwayPanel, ViewPanel, type AircraftKey
 import { AtmospherePanel, ClimbPanel, GlidePanel, SelectedPanel, SpeedsTable, Tiles } from './components/Readouts.js';
 import { EnvelopeTab } from './components/Envelope.js';
 import { RunwayTab } from './components/Runway.js';
+import { CruiseTab } from './components/Cruise.js';
 
 const TAB_NAMES: Record<Tab, string> = {
   curves: 'Performance curves',
   envelope: 'Envelope and manoeuvre',
   field: 'Takeoff and landing',
+  range: 'Range',
 };
 
 const REPO_URL = 'https://github.com/satwiksharma01/flight-performance-sim';
@@ -142,7 +145,7 @@ export function App() {
   const editAircraft = (key: AircraftKey, value: number | null) =>
     update((s) => {
       const { [key]: _removed, ...without } = s.scenario.aircraft;
-      const optional = key === 'clMaxFlaps' || key === 'clMaxTakeoff';
+      const optional = key === 'clMaxFlaps' || key === 'clMaxTakeoff' || key === 'emptyMass' || key === 'fuelCapacity';
       const aircraft: Aircraft =
         value === null ? (optional ? (without as Aircraft) : s.scenario.aircraft) : { ...s.scenario.aircraft, [key]: value };
       // An operating mass above a newly lowered max takeoff mass fails the
@@ -251,6 +254,7 @@ export function App() {
       return null;
     }
   }, [scenario, view]);
+  const cruise = useMemo(() => (view.tab === 'range' ? buildCruiseModel(scenario, view) : null), [scenario, view]);
   const runway = useMemo(() => {
     if (view.tab !== 'field') return null;
     try {
@@ -369,6 +373,7 @@ export function App() {
                   onEnergyPick={pickEnergy}
                 />
               )}
+              {view.tab === 'range' && cruise && <CruiseTab cruise={cruise} view={view} theme={theme} />}
               {view.tab === 'field' && runway && (
                 <RunwayTab runway={runway} view={view} theme={theme} onAltitude={setAltitudeFt} />
               )}

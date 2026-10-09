@@ -1,4 +1,5 @@
 import type { Aircraft } from '../../physics/aero.js';
+import { BSFC_LB_PER_HP_H, TSFC_LB_PER_LBF_H } from '../../physics/propulsion.js';
 
 const KT = 1852 / 3600;
 
@@ -50,7 +51,10 @@ export const CESSNA_172S: Aircraft = {
     power: 180 * 745.699872, // Lycoming IO-360-L2A, 180 hp at 2,700 rpm
     // Fitted, with the exact climb, to the POH best rate of climb: 730 ft/min at 74 KIAS, sea level
     propeller: { staticThrust: 3035, zeroThrustSpeed: 175.9 },
+    sfc: 0.45 * BSFC_LB_PER_HP_H, // assumed: Anderson's CP-1 value, not from the POH
   },
+  emptyMass: 1663 * 0.45359237, // POH standard empty weight
+  fuelCapacity: 53 * 6 * 0.45359237, // 53 gal usable avgas at 6 lb/gal
   // Normal category, POH section 2. V_C is taken as V_NO, the least 14 CFR
   // 23.1505 allows, and V_D as V_NE / 0.9, so V_NE comes out at the published
   // 160 KCAS. The negative-stall CL isn't published: about -1.1 for the
@@ -77,7 +81,9 @@ export const GENERIC_JET_TRAINER: Aircraft = {
   clMaxTakeoff: 1.6,
   // One small turbofan: thrust-to-weight 0.32 at sea level, thrust lapsing
   // with density.
-  propulsion: { kind: 'turbofan', thrust: 14000, lapseExponent: 1.0 },
+  propulsion: { kind: 'turbofan', thrust: 14000, lapseExponent: 1.0, sfc: 0.75 * TSFC_LB_PER_LBF_H },
+  emptyMass: 2800,
+  fuelCapacity: 1200,
   // Aerobatic-trainer limits, V_D = 1.25 V_C.
   structure: { nPositive: 7, nNegative: -3.5, cruiseSpeed: 300 * KT, diveSpeed: 375 * KT, clMin: -0.9 },
 };

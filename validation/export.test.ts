@@ -18,6 +18,7 @@ import { specificExcessPower } from '../src/physics/performance/energy.js';
 import { RUNWAY_SURFACES, landing, takeoff } from '../src/physics/performance/field.js';
 import { liftLimitedLoadFactor, sustainedLoadFactor } from '../src/physics/performance/turn.js';
 import { vnBoundaries, vnDiagram } from '../src/physics/performance/vn.js';
+import { breguet } from '../src/physics/performance/range.js';
 import type { Aircraft } from '../src/physics/aero.js';
 
 /** Engines no preset uses, so every model is checked. */
@@ -149,9 +150,18 @@ it('exports the sweep', () => {
     ),
   );
 
+  // Breguet range and endurance for every aircraft with fuel data.
+  const cruise = Object.entries(all).flatMap(([id, ac]) =>
+    [0, 3000, 9000].flatMap((h) => {
+      const rho = atPressureAltitude(h).density;
+      const r = breguet(ac, rho, 0.2 * ac.mass);
+      return r ? [{ id, ac, h, rho, fuel: 0.2 * ac.mass, result: r }] : [];
+    }),
+  );
+
   mkdirSync(OUT, { recursive: true });
   writeFileSync(
     join(OUT, 'ts-output.json'),
-    JSON.stringify({ atmosphere, aero, performance, ceilings: ceilingRows, envelope, turns, field }, null, 1),
+    JSON.stringify({ atmosphere, aero, performance, ceilings: ceilingRows, envelope, turns, field, cruise }, null, 1),
   );
 });

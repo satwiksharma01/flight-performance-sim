@@ -5,6 +5,8 @@ import {
   ENGINE_KINDS,
   G0,
   PROPULSION_LIMITS,
+  BSFC_LB_PER_HP_H,
+  TSFC_LB_PER_LBF_H,
   bankForLoadFactor,
   RUNWAY_SURFACES,
   STRUCTURE_LIMITS,
@@ -106,6 +108,28 @@ function aircraftFields(system: UnitSystem): readonly (FieldDef & { readonly key
       ...range('clMaxTakeoff'),
       ...identity,
     },
+    {
+      key: 'emptyMass',
+      id: 'oew',
+      label: 'Empty mass',
+      unit: SYSTEM_UNITS[system].mass,
+      hint: 'Without fuel or payload. Blank: no range or payload-range.',
+      optional: true,
+      ...range('emptyMass'),
+      toDisplay: (v) => toMass(v, system),
+      fromDisplay: (v) => fromMass(v, system),
+    },
+    {
+      key: 'fuelCapacity',
+      id: 'fuel',
+      label: 'Usable fuel',
+      unit: SYSTEM_UNITS[system].mass,
+      hint: 'Fuel mass the tanks hold. Blank: no range or payload-range.',
+      optional: true,
+      ...range('fuelCapacity'),
+      toDisplay: (v) => toMass(v, system),
+      fromDisplay: (v) => fromMass(v, system),
+    },
   ];
 }
 
@@ -162,6 +186,23 @@ function engineFields(
     value,
     set: (v: number | null) => set(v ?? value),
   });
+  const jet = engine.kind === 'turbofan';
+  // Shown in the units engineers quote: lb/(hp h) or g/(kW h); lb/(lbf h) or g/(kN s).
+  const sfcUnit = jet ? (us ? TSFC_LB_PER_LBF_H : 1e-6) : us ? BSFC_LB_PER_HP_H : 1e-3 / 3.6e6;
+  const sfcField = {
+    def: {
+      id: 'sfc',
+      label: 'Fuel consumption',
+      unit: jet ? (us ? 'lb/(lbf h)' : 'g/(kN s)') : us ? 'lb/(hp h)' : 'g/(kW h)',
+      hint: jet ? 'Thrust specific fuel consumption, in cruise.' : 'Brake specific fuel consumption, in cruise.',
+      min: (jet ? L.tsfc : L.bsfc).min,
+      max: (jet ? L.tsfc : L.bsfc).max,
+      toDisplay: (v: number) => v / sfcUnit,
+      fromDisplay: (v: number) => v * sfcUnit,
+    },
+    value: engine.sfc,
+    set: (v: number | null) => ({ ...engine, sfc: v ?? engine.sfc }) as Propulsion,
+  };
 
   if (engine.kind === 'turbofan') {
     return [
@@ -171,6 +212,7 @@ function engineFields(
         set: (v) => ({ ...engine, thrust: v ?? engine.thrust }),
       },
       lapse(engine.lapseExponent, (v) => ({ ...engine, lapseExponent: v })),
+      sfcField,
     ];
   }
 
@@ -210,7 +252,7 @@ function engineFields(
   };
 
   if (engine.kind === 'turboprop') {
-    return [powerField, lapse(engine.lapseExponent, (v) => ({ ...engine, lapseExponent: v })), ...propFields];
+    return [powerField, lapse(engine.lapseExponent, (v) => ({ ...engine, lapseExponent: v })), ...propFields, sfcField];
   }
   const { criticalAltitude: _critical, ...aspirated } = engine;
   return [
@@ -231,6 +273,7 @@ function engineFields(
       set: (v) => (v === null ? aspirated : { ...engine, criticalAltitude: v }),
     },
     ...propFields,
+    sfcField,
   ];
 }
 

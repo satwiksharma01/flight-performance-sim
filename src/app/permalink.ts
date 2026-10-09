@@ -10,7 +10,7 @@
  *   `?ac=c172&m=900` rather than every parameter spelled out.
  *
  * - View settings, under their own keys (`x` for the axis, `u` for the speed
- *   unit, `sys` for SI or US units, `tab` for the envelope or field tab).
+ *   unit, `sys` for SI or US units, `tab` for the envelope, field or range tab).
  *   They don't change any number, but a link pasted into a report should open
  *   on the chart its author was looking at. Like the scenario keys, these are a
  *   public format: append-only.
