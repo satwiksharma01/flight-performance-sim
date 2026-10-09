@@ -273,7 +273,16 @@ describe('climb and glide in the chart model', () => {
 
   it('measures glide distance from this altitude as height times the glide ratio', () => {
     const at = buildChartModel(scenario({ altitude: 3048 }), view('tas'));
-    expect(at.glide.distanceToSeaLevel).toBeCloseTo(3048 * at.glide.best.ratio, 6);
+    expect(at.glide.distanceToSeaLevel).toBeCloseTo(at.atmosphere.geometricAltitude * at.glide.best.ratio, 6);
+    // Standard day: true height is the pressure altitude, less the geopotential correction.
+    expect(at.atmosphere.geometricAltitude / 3048).toBeCloseTo(1, 3);
+  });
+
+  it('glides further from a pressure level on a hot day, which sits higher', () => {
+    const std = buildChartModel(scenario({ altitude: 2438.4 }), view('tas'));
+    const hot = buildChartModel(scenario({ altitude: 2438.4, deltaISA: 15 }), view('tas'));
+    // FL080 on an ISA +15 day sits about 5.4 % higher: ΔT/T integrated up the column.
+    expect(hot.glide.distanceToSeaLevel / std.glide.distanceToSeaLevel).toBeCloseTo(1.054, 2);
   });
 });
 

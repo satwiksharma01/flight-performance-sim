@@ -449,7 +449,7 @@ export interface ChartModel {
   readonly glide: {
     readonly best: GlideMark;
     readonly minSink: GlideMark;
-    /** Still-air distance from this pressure altitude down to sea level [m] */
+    /** Still-air distance from this level's true height down to sea level [m] */
     readonly distanceToSeaLevel: number;
   };
 }
@@ -643,7 +643,8 @@ export function buildChartModel(scenario: Scenario, view: ViewSettings): ChartMo
     glide: {
       best: glideMark(best),
       minSink: glideMark(minimumSink(aircraft, atmosphere)),
-      distanceToSeaLevel: Math.max(0, scenario.altitude) * best.glideRatio,
+      // True height, not pressure altitude: on a hot day the level sits higher.
+      distanceToSeaLevel: Math.max(0, atmosphere.geometricAltitude) * best.glideRatio,
     },
   };
 }
