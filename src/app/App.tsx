@@ -38,7 +38,7 @@ const TAB_NAMES: Record<Tab, string> = {
   field: 'Takeoff and landing',
 };
 
-const REPO_URL = 'https://github.com/satwiksharma01/Aerospace-Flight-Performance-Simulator';
+const REPO_URL = 'https://github.com/satwiksharma01/flight-performance-sim';
 
 /** Rebuild the charts with fresh colours when the OS colour scheme flips. */
 function useColorScheme(): 'light' | 'dark' {

@@ -12,7 +12,7 @@ import { CASES, GROUPS, evaluate, type Role, type ValidationCase } from '../data
 import { CROSS_CHECK } from '../data/validation/cross-check.generated.js';
 import { POH_SOURCE, POH_TABLES, compareTable, summarise, type CellResult, type PohTable } from '../data/validation/poh-c172s.js';
 
-const REPO_URL = 'https://github.com/satwiksharma01/Aerospace-Flight-Performance-Simulator';
+const REPO_URL = 'https://github.com/satwiksharma01/flight-performance-sim';
 
 const ROLE: Record<Role, { readonly label: string; readonly meaning: string }> = {
   reference: { label: 'Reference', meaning: 'A standard or textbook value the physics must reproduce.' },

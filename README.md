@@ -1,6 +1,6 @@
 # Flight Performance Simulator
 
-[![CI](https://github.com/satwiksharma01/Aerospace-Flight-Performance-Simulator/actions/workflows/ci.yml/badge.svg)](https://github.com/satwiksharma01/Aerospace-Flight-Performance-Simulator/actions/workflows/ci.yml)
+[![CI](https://github.com/satwiksharma01/flight-performance-sim/actions/workflows/ci.yml/badge.svg)](https://github.com/satwiksharma01/flight-performance-sim/actions/workflows/ci.yml)
 
 Aircraft performance analysis in the browser: drag, power, climb, ceilings and glide;
 the V-n diagram, turns and specific excess power; takeoff and landing. Everything
@@ -14,11 +14,13 @@ table by table.
   <img alt="The explorer showing a Cessna 172S at 8,000 ft pressure altitude on an ISA +15 day: density altitude 9,721 ft, best rate of climb 285 ft/min, service ceiling 12,255 ft. Charts show drag with thrust available, power required and available, L/D, rate of climb with V_x, V_y and V_max, and best rate of climb against altitude down to the ceilings." src="docs/explorer-light.png">
 </picture>
 
+**Live:** [satwiksharma01.github.io/flight-performance-sim](https://satwiksharma01.github.io/flight-performance-sim/) · [validation](https://satwiksharma01.github.io/flight-performance-sim/validation.html)
+
 **Status:** v0.5, envelope and manoeuvre. Three tabs: performance curves, the
 envelope (V-n diagram, turn performance, P_s contours), and takeoff and landing. A
 [/validation](validation.html) page shows the model against every published figure
 and every cell of the 172S's POH tables, and CI re-runs the tests and the independent
-cross-check on every push. Not deployed yet. See [ROADMAP.md](ROADMAP.md).
+cross-check on every push, and deploys to GitHub Pages when they pass. See [ROADMAP.md](ROADMAP.md).
 
 ## What it shows
 
