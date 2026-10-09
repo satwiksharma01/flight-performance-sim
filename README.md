@@ -108,7 +108,7 @@ cross-check on every push, and deploys to GitHub Pages when they pass. See [ROAD
 
 ## Validation
 
-The **Validation** page (`validation.html`) lists 41 published figures from four
+The **Validation** page (`validation.html`) lists 43 published figures from four
 sources: the US Standard Atmosphere 1976 tables, NACA Report 1135, Anderson's worked
 examples, and the Cessna 172S POH. Each shows published value, model value,
 difference, tolerance and status, computed live in the browser. Below them are the
@@ -131,6 +131,8 @@ every push.
 
 What the 172S comparison says, in brief:
 
+- **Range and endurance:** Anderson's CP-1 example (*Introduction to Flight*, 8th ed.,
+  Example 6.19), 1,207 mi and 14.4 h, reproduced to within 0.25 %.
 - **Limits:** `V_A` at all three published weights within 1.3 kt, never fitted.
 - **Climb:** within 5 % at sea level; 10–18 % low at altitude on cold days.
 - **Takeoff:** 11–20 % short, a pinned discrepancy. The growth with density altitude

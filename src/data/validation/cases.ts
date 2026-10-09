@@ -20,6 +20,8 @@ import { pitotPressureRatio } from '../../physics/airspeed.js';
 import { maxLiftToDrag, stallSpeed, vMinDrag, type Aircraft } from '../../physics/aero.js';
 import { ceilings, climbPerformance, type PoweredAircraft } from '../../physics/performance/climb.js';
 import { RUNWAY_SURFACES, landing, takeoff } from '../../physics/performance/field.js';
+import { breguet } from '../../physics/performance/range.js';
+import { BSFC_LB_PER_HP_H } from '../../physics/propulsion.js';
 import { vnDiagram, type StructuralLimits } from '../../physics/performance/vn.js';
 import { CESSNA_172S } from '../aircraft/presets.js';
 import { POH_SOURCE, pohCondition } from './poh-c172s.js';
@@ -96,6 +98,7 @@ const SOURCE = {
   ussa: 'US Standard Atmosphere 1976, table I',
   naca: 'NACA Report 1135 (1953), tables I and II',
   anderson: 'Anderson, Introduction to Flight, ch. 6, CP-1 and CP-2',
+  andersonRange: 'Anderson, Introduction to Flight, 8th ed., Example 6.19',
   poh: 'Cessna 172S Pilot’s Operating Handbook, sections 1, 4 and 5',
 } as const;
 
@@ -111,6 +114,24 @@ function lazy<T>(make: () => T): () => T {
 }
 
 const seaLevel = lazy(() => atPressureAltitude(0));
+
+/**
+ * CP-1 for Anderson's range and endurance example: 65 gal at 5.64 lb/gal,
+ * 0.45 lb/(hp h), propeller efficiency 0.8, sea level. The book flies V_mp
+ * without a stall check, so CLmax is set high enough that the simulator's
+ * 1.2 V_s floor doesn't bind. Breguet doesn't use the propeller line.
+ */
+const cp1Breguet = lazy(() =>
+  breguet(
+    {
+      ...fromBook(2950, 174, 7.37, 0.8, 0.025),
+      clMax: 3,
+      propulsion: { kind: 'piston', power: 230 * 745.699872, propeller: { staticThrust: 1, zeroThrustSpeed: 100 }, sfc: 0.45 * BSFC_LB_PER_HP_H },
+    },
+    seaLevel().density,
+    65 * 5.64 * LB,
+  )!,
+);
 const c172 = CESSNA_172S as PoweredAircraft;
 const c172Climb = lazy(() => climbPerformance(c172, seaLevel()));
 const c172Ceilings = lazy(() => ceilings(c172));
@@ -281,6 +302,33 @@ export const CASES: readonly ValidationCase[] = [
     model: () => maxLiftToDrag(fromBook(19815, 318, 8.93, 0.81, 0.02)),
     tolerance: { absolute: 0.05 },
     source: SOURCE.anderson,
+  },
+  {
+    id: 'anderson-cp1-range',
+    group: 'textbook',
+    quantity: 'Maximum range, Breguet',
+    condition: 'CP-1: 2,950 to 2,583 lb, 0.45 lb/(hp h), η 0.8, at (L/D)max',
+    role: 'reference',
+    published: 1207,
+    unit: 'mi',
+    decimals: 0,
+    model: () => cp1Breguet().range.value / 1609.344,
+    tolerance: { relative: 0.005 },
+    source: SOURCE.andersonRange,
+  },
+  {
+    id: 'anderson-cp1-endurance',
+    group: 'textbook',
+    quantity: 'Maximum endurance, Breguet',
+    condition: 'CP-1: as above, sea level, at (C_L^1.5/C_D)max',
+    role: 'reference',
+    published: 14.4,
+    unit: 'h',
+    decimals: 2,
+    model: () => cp1Breguet().endurance.value / 3600,
+    tolerance: { relative: 0.005 },
+    source: SOURCE.andersonRange,
+    note: 'The book flies V_mp without a stall check; here the simulator’s 1.2 V_s floor is lifted to match. CP-2’s range and endurance are pending a verified source.',
   },
 
   {
