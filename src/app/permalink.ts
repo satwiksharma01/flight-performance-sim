@@ -10,7 +10,8 @@
  *   `?ac=c172&m=900` rather than every parameter spelled out.
  *
  * - View settings, under their own keys (`x` for the axis, `u` for the speed
- *   unit, `sys` for SI or US units, `tab` for the envelope, field or range tab).
+ *   unit, `sys` for SI or US units, `tab` for the envelope, field, range or
+ *   sensitivity tab).
  *
  * - A second aircraft to compare against, under the same keys as the first
  *   with a `vs.` prefix: `?ac=c172&vs.ac=c172&vs.cd0=0.03` is a 172 compared

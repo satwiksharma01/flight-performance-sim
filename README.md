@@ -16,8 +16,9 @@ table by table.
 
 **Live:** [satwiksharma01.github.io/flight-performance-sim](https://satwiksharma01.github.io/flight-performance-sim/) · [validation](https://satwiksharma01.github.io/flight-performance-sim/validation.html)
 
-**Status:** v0.5, envelope and manoeuvre. Three tabs: performance curves, the
-envelope (V-n diagram, turn performance, P_s contours), and takeoff and landing. A
+**Status:** v0.6, cruise and comparison. Five tabs: performance curves, the envelope
+(V-n diagram, turn performance, P_s contours), takeoff and landing, range, and
+sensitivity, and a second aircraft can be overlaid for comparison. A
 [/validation](validation.html) page shows the model against every published figure
 and every cell of the 172S's POH tables, and CI re-runs the tests and the independent
 cross-check on every push, and deploys to GitHub Pages when they pass. See [ROADMAP.md](ROADMAP.md).
@@ -73,6 +74,12 @@ cross-check on every push, and deploys to GitHub Pages when they pass. See [ROAD
   ceilings, glide, takeoff, landing and range. It flies the same condition at the same
   fraction of its own max takeoff mass. In the link it is the same keys with a
   `vs.` prefix: `?ac=c172&vs.ac=c172&vs.cd0=0.035` is a 172 against a cleaner one.
+- **Sensitivity.** Each input (weight, wing area, aspect ratio, Oswald efficiency,
+  CD₀, each CLmax, engine power, SFC, fuel) nudged 1 % either way on its own, and
+  every result's change found by central difference. Each is reported as an
+  elasticity, the per cent change for 1 % more of the input, ranked as bars with a
+  sentence naming the strongest. Where a closed form exists, the bars reproduce its
+  exponents: stall speed ±0.50 in weight, wing area and CLmax.
 - **SI or US units** for force, power, weight and area: N, kW and kg, or lbf, hp
   and lb.
 - **Every scenario is a link.** `?ac=c172&h=2438.4&disa=15` is a Cessna at
@@ -114,6 +121,11 @@ cross-check on every push, and deploys to GitHub Pages when they pass. See [ROAD
 11. **Clean up a 172.** Compare the stock 172 with one at CD₀ 0.035 and AR 9:
     (L/D)max, glide ratio and Breguet range all rise by the same 34 %, because each
     is proportional to (L/D)max, while the stall speed doesn't move.
+12. **Ask what matters.** On the sensitivity tab, the 172's takeoff over 50 ft is
+    led by weight at +2.05: the ground roll goes nearly as W². Switch to best range:
+    SFC sits at exactly −1, because Breguet range goes as 1/SFC, and CD₀, aspect
+    ratio and Oswald efficiency at ±0.50, because the range is flown at
+    (L/D)max ∝ √(πeAR/CD₀). Wing area doesn't move it at all.
 
 ## Validation
 
@@ -154,7 +166,7 @@ What the 172S comparison says, in brief:
 ```bash
 npm install
 npm run dev          # the explorer at http://localhost:5173, validation at /validation.html
-npm test             # 370 tests
+npm test             # 383 tests
 npm run validate     # cross-check against the independent Python reference (needs SciPy)
 npm run typecheck
 npm run build        # static site in dist/, relative paths, any host
@@ -182,11 +194,13 @@ npm run build        # static site in dist/, relative paths, any host
 | `src/state/url.ts` | Scenario permalinks: delta-encoded, and decoding never throws |
 | `src/app/model.ts` | Everything the charts draw, as pure functions: axis conversions, the fixed chart window, sampled curves |
 | `src/app/permalink.ts` | View settings in the URL, and delta encoding for edited presets |
-| `src/app/envelope.ts`, `runway.ts`, `contour.ts` | The envelope and takeoff tabs' models, and marching-squares contours |
+| `src/app/envelope.ts`, `runway.ts`, `cruise.ts`, `contour.ts` | The envelope, takeoff and range tabs' models, and marching-squares contours |
+| `src/app/compare.ts` | The second aircraft: same condition, same MTOW fraction, and the side-by-side table |
+| `src/app/sensitivity.ts` | Elasticities by central difference, ranked, with a templated sentence |
 | `src/data/validation/` | The validation dataset, the POH tables, and the cross-check's last run |
 | `src/app/components/` | React controls, readouts, and the uPlot chart with its marker overlays |
 
-370 tests, covering the published ISA table at five altitudes, layer continuity,
+383 tests, covering the published ISA table at five altitudes, layer continuity,
 profile inversion, every closed-form optimum cross-checked against a brute-force
 scan, permalink round-trip stability, and the chart model's physics: the drag curve
 is identical against EAS at every altitude and slides right by `sqrt(ρ₀/ρ)` against

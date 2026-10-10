@@ -57,8 +57,8 @@ export type SpeedUnit = 'kt' | 'mps' | 'kmh';
 /** Units for force, power, mass, area and length. Speed has its own setting. */
 export type UnitSystem = 'si' | 'us';
 /** Which part of the explorer is showing. */
-export type Tab = 'curves' | 'envelope' | 'field' | 'range';
-export const TABS: readonly Tab[] = ['curves', 'envelope', 'field', 'range'];
+export type Tab = 'curves' | 'envelope' | 'field' | 'range' | 'sensitivity';
+export const TABS: readonly Tab[] = ['curves', 'envelope', 'field', 'range', 'sensitivity'];
 
 export interface ViewSettings {
   /** Which airspeed the x-axis shows */

@@ -716,6 +716,54 @@ input[type='range'] {
   display: inline-block;
 }
 
+/* --- Sensitivity: signed bars about a zero line ---------------------------- */
+
+.sens-pick {
+  max-width: 320px;
+}
+
+.sens-sentence {
+  font-size: 14px;
+}
+
+.sens-bars {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.sens-bars li {
+  display: grid;
+  grid-template-columns: minmax(0, min(13em, 40%)) minmax(60px, 1fr) 4em;
+  gap: 12px;
+  align-items: center;
+}
+
+.sens-track {
+  position: relative;
+  height: 12px;
+  background: linear-gradient(var(--grid), var(--grid)) center / 1px 100% no-repeat;
+}
+
+.sens-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  border-radius: 0 3px 3px 0;
+  background: var(--series-1);
+}
+
+.sens-bar--down {
+  left: auto;
+  right: 50%;
+  border-radius: 3px 0 0 3px;
+  background: var(--series-2);
+}
+
 /* --- Tables --------------------------------------------------------------- */
 
 .tables {

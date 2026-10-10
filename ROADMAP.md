@@ -378,7 +378,10 @@ curve move. A complete product at a tiny scope.
 - [x] Two-aircraft overlay comparison — *second aircraft fully editable (`vs.` keys),
       same condition at the same MTOW fraction, overlaid on the curves tab with a
       side-by-side table*
-- [ ] Sensitivity analysis panel (finite-difference, deterministic)
+- [x] Sensitivity analysis panel (finite-difference, deterministic) — *elasticities
+      by central difference at ±1 %, ranked as bars with a templated sentence; the
+      closed forms' exponents come back exact to the two decimals shown, and the
+      172's stall-limited minimum sink matches the exact (not small-angle) glide*
 
 ### v1.0 — Polish
 - [ ] Educational mode: click a result → the equation **with the actual numbers

@@ -35,12 +35,15 @@ import { AtmospherePanel, ClimbPanel, GlidePanel, SelectedPanel, SpeedsTable, Ti
 import { EnvelopeTab } from './components/Envelope.js';
 import { RunwayTab } from './components/Runway.js';
 import { CruiseTab } from './components/Cruise.js';
+import { SensitivityTab } from './components/Sensitivity.js';
+import { buildSensitivity } from './sensitivity.js';
 
 const TAB_NAMES: Record<Tab, string> = {
   curves: 'Performance curves',
   envelope: 'Envelope and manoeuvre',
   field: 'Takeoff and landing',
   range: 'Range',
+  sensitivity: 'Sensitivity',
 };
 
 const REPO_URL = 'https://github.com/satwiksharma01/flight-performance-sim';
@@ -287,6 +290,14 @@ export function App() {
     }
   }, [scenario, view]);
   const cruise = useMemo(() => (view.tab === 'range' ? buildCruiseModel(scenario, view) : null), [scenario, view]);
+  const sensitivity = useMemo(() => {
+    if (view.tab !== 'sensitivity') return null;
+    try {
+      return buildSensitivity(scenario);
+    } catch {
+      return null;
+    }
+  }, [scenario, view.tab]);
   const runway = useMemo(() => {
     if (view.tab !== 'field') return null;
     try {
@@ -422,6 +433,9 @@ export function App() {
                 />
               )}
               {view.tab === 'range' && cruise && <CruiseTab cruise={cruise} view={view} theme={theme} />}
+              {view.tab === 'sensitivity' && sensitivity && (
+                <SensitivityTab model={sensitivity} comparing={state.compare !== undefined} />
+              )}
               {view.tab === 'field' && runway && (
                 <RunwayTab runway={runway} view={view} theme={theme} onAltitude={setAltitudeFt} />
               )}
