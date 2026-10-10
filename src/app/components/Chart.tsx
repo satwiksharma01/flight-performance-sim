@@ -106,6 +106,12 @@ export interface ChartProps {
   readonly selectedLabel?: string;
   /** Charts with the same key share a cursor. Default: the speed charts' key */
   readonly syncKey?: string;
+  /**
+   * A second dataset on its own x samples: the comparison aircraft. Joined to
+   * the first by uPlot, which fills the gaps with undefined, so its lines run
+   * through them while its own nulls still break them.
+   */
+  readonly overlay?: { readonly x: readonly number[]; readonly series: readonly ChartSeries[] } | undefined;
 }
 
 interface Theme {
@@ -143,7 +149,14 @@ function readTheme(series: readonly ChartSeries[], extra: readonly string[]): Th
 }
 
 function toData(props: ChartProps): uPlot.AlignedData {
-  return [props.x as number[], ...props.series.map((s) => s.values as number[])];
+  const main: uPlot.AlignedData = [props.x as number[], ...props.series.map((s) => s.values as number[])];
+  if (!props.overlay) return main;
+  return uPlot.join([main, [props.overlay.x as number[], ...props.overlay.series.map((s) => s.values as number[])]]);
+}
+
+/** Every series drawn, the overlay's after the main ones. */
+function allSeries(props: ChartProps): readonly ChartSeries[] {
+  return props.overlay ? [...props.series, ...props.overlay.series] : props.series;
 }
 
 /** Text with a halo in the surface colour, so it stays legible over lines. */
@@ -172,7 +185,7 @@ export function Chart(props: ChartProps) {
     props.yLabel,
     props.syncKey ?? '',
     extraVars.join(','),
-    ...props.series.map(
+    ...allSeries(props).map(
       (s) => `${s.label}|${s.colorVar}|${s.dash?.join(',') ?? ''}|${s.directLabel ?? ''}|${s.pointsOnly ?? ''}|${s.faint ?? ''}`,
     ),
   ].join('§');
@@ -181,7 +194,7 @@ export function Chart(props: ChartProps) {
     const el = host.current;
     if (!el) return;
 
-    const theme = readTheme(latest.current.series, extraVars);
+    const theme = readTheme(allSeries(latest.current), extraVars);
     // Canvas pixels per CSS pixel are read on every draw, never cached here:
     // the ratio changes when the window moves to a screen of another density.
     const font = (size: number, weight = 400) =>
@@ -489,7 +502,7 @@ export function Chart(props: ChartProps) {
           label: latest.current.xLabel,
           value: (_u, v) => (v == null ? '–' : latest.current.formatX(v)),
         },
-        ...latest.current.series.map((s, i) => ({
+        ...allSeries(latest.current).map((s, i) => ({
           label: s.label,
           stroke: theme.series[i] ?? theme.ink,
           width: s.faint ? 1 : 2,

@@ -28,7 +28,9 @@ import { buildCruiseModel } from './cruise.js';
 import { canonicalize, readPermalink, writePermalink, type Permalink } from './permalink.js';
 import { axisLabel, axisTick, num, tick } from './format.js';
 import { Chart, type ChartBand, type ChartMarker } from './components/Chart.js';
-import { AircraftPanel, ConditionPanel, RunwayPanel, ViewPanel, type AircraftKey } from './components/Controls.js';
+import { AddComparison, AircraftPanel, ConditionPanel, RunwayPanel, ViewPanel, type AircraftKey } from './components/Controls.js';
+import { ComparisonTable } from './components/Compare.js';
+import { buildComparison, unionWindow } from './compare.js';
 import { AtmospherePanel, ClimbPanel, GlidePanel, SelectedPanel, SpeedsTable, Tiles } from './components/Readouts.js';
 import { EnvelopeTab } from './components/Envelope.js';
 import { RunwayTab } from './components/Runway.js';
@@ -42,6 +44,36 @@ const TAB_NAMES: Record<Tab, string> = {
 };
 
 const REPO_URL = 'https://github.com/satwiksharma01/flight-performance-sim';
+
+// --- Aircraft edits, shared by the first aircraft and the comparison ---------
+
+type AircraftEdit = (aircraft: Aircraft) => Aircraft;
+
+const OPTIONAL: readonly AircraftKey[] = ['clMaxFlaps', 'clMaxTakeoff', 'emptyMass', 'fuelCapacity'];
+
+/** Set a parameter, or remove an optional one with null. */
+const fieldEdit =
+  (key: AircraftKey, value: number | null): AircraftEdit =>
+  (aircraft) => {
+    if (value !== null) return { ...aircraft, [key]: value };
+    if (!OPTIONAL.includes(key)) return aircraft;
+    const { [key]: _removed, ...without } = aircraft;
+    return without as Aircraft;
+  };
+
+const engineEdit =
+  (engine: Propulsion | undefined): AircraftEdit =>
+  (aircraft) => {
+    const { propulsion: _previous, ...glider } = aircraft;
+    return engine ? { ...glider, propulsion: engine } : glider;
+  };
+
+const structureEdit =
+  (structure: StructuralLimits | undefined): AircraftEdit =>
+  (aircraft) => {
+    const { structure: _previous, ...bare } = aircraft;
+    return structure ? { ...bare, structure } : bare;
+  };
 
 /** Rebuild the charts with fresh colours when the OS colour scheme flips. */
 function useColorScheme(): 'light' | 'dark' {
@@ -141,30 +173,18 @@ export function App() {
       return { ...s, basePresetId: id, scenario: { ...rest, presetId: id, aircraft, tas } };
     });
 
-  /** Set an aircraft parameter, or remove an optional one (a flap CLmax) with null. */
-  const editAircraft = (key: AircraftKey, value: number | null) =>
-    update((s) => {
-      const { [key]: _removed, ...without } = s.scenario.aircraft;
-      const optional = key === 'clMaxFlaps' || key === 'clMaxTakeoff' || key === 'emptyMass' || key === 'fuelCapacity';
-      const aircraft: Aircraft =
-        value === null ? (optional ? (without as Aircraft) : s.scenario.aircraft) : { ...s.scenario.aircraft, [key]: value };
-      // An operating mass above a newly lowered max takeoff mass fails the
-      // permalink's check, so canonicalisation returns it to the maximum.
-      return { ...s, scenario: { ...s.scenario, presetId: null, aircraft } };
-    });
+  // An operating mass above a newly lowered max takeoff mass fails the
+  // permalink's check, so canonicalisation returns it to the maximum.
+  const editFirst = (edit: AircraftEdit) =>
+    update((s) => ({ ...s, scenario: { ...s.scenario, presetId: null, aircraft: edit(s.scenario.aircraft) } }));
 
-  const setEngine = (engine: Propulsion | undefined) =>
-    update((s) => {
-      const { propulsion: _previous, ...glider } = s.scenario.aircraft;
-      const aircraft: Aircraft = engine ? { ...glider, propulsion: engine } : glider;
-      return { ...s, scenario: { ...s.scenario, presetId: null, aircraft } };
-    });
+  const editSecond = (edit: AircraftEdit) =>
+    update((s) => (s.compare ? { ...s, compare: { ...s.compare, presetId: null, aircraft: edit(s.compare.aircraft) } } : s));
 
-  const setStructure = (structure: StructuralLimits | undefined) =>
+  const setComparison = (id: PresetId | null) =>
     update((s) => {
-      const { structure: _previous, ...bare } = s.scenario.aircraft;
-      const aircraft: Aircraft = structure ? { ...bare, structure } : bare;
-      return { ...s, scenario: { ...s.scenario, presetId: null, aircraft } };
+      const { compare: _previous, ...rest } = s;
+      return id === null ? rest : { ...rest, compare: { aircraft: PRESETS[id], presetId: id, basePresetId: id } };
     });
 
   const setSurface = (surface: SurfaceId) =>
@@ -244,6 +264,18 @@ export function App() {
 
   const model = result.model;
 
+  // The comparison aircraft, flown at the same condition. The curves tab's
+  // axes widen to hold both.
+  const comparison = useMemo(
+    () => (model && state.compare ? buildComparison(scenario, model, state.compare, view) : null),
+    [model, scenario, state.compare, view],
+  );
+  const second = comparison && !('error' in comparison) ? comparison : null;
+  const win = model ? (second ? unionWindow(model.window, second.model.window) : model.window) : null;
+  const secondName = state.compare?.aircraft.name ?? '';
+  const overlay = (x: readonly number[], values: readonly (number | null)[] | null | undefined, label: string) =>
+    second && values ? { x, series: [{ label: `${label}, ${secondName}`, values, colorVar: '--compare', dash: [8, 4] }] } : undefined;
+
   // Only the visible tab's extra model is built: the P_s grid alone is a few
   // thousand evaluations.
   const envelope = useMemo(() => {
@@ -310,11 +342,27 @@ export function App() {
             presetId={scenario.presetId}
             basePresetId={state.basePresetId}
             onPreset={selectPreset}
-            onEdit={editAircraft}
-            onEngine={setEngine}
-            onStructure={setStructure}
+            onEdit={(key, value) => editFirst(fieldEdit(key, value))}
+            onEngine={(engine) => editFirst(engineEdit(engine))}
+            onStructure={(structure) => editFirst(structureEdit(structure))}
             system={view.system}
           />
+          {state.compare ? (
+            <AircraftPanel
+              title="Compared with"
+              aircraft={state.compare.aircraft}
+              presetId={state.compare.presetId}
+              basePresetId={state.compare.basePresetId}
+              onPreset={setComparison}
+              onEdit={(key, value) => editSecond(fieldEdit(key, value))}
+              onEngine={(engine) => editSecond(engineEdit(engine))}
+              onStructure={(structure) => editSecond(structureEdit(structure))}
+              onRemove={() => setComparison(null)}
+              system={view.system}
+            />
+          ) : (
+            <AddComparison onAdd={setComparison} />
+          )}
           {model && (
             <ConditionPanel
               altitude={scenario.altitude}
@@ -409,8 +457,9 @@ export function App() {
                       ? [{ label: 'Thrust available', values: model.available.thrust, colorVar: '--ink', directLabel: 'Thrust available' }]
                       : []),
                   ]}
-                  xMax={model.window.xMax}
-                  yMax={model.window.dragMax}
+                  overlay={overlay(second?.model.x ?? [], second?.model.drag, 'Total drag')}
+                  xMax={win!.xMax}
+                  yMax={win!.dragMax}
                   xLabel={axisLabel(view)}
                   yLabel={`Drag (${SYSTEM_UNITS[view.system].force})`}
                   formatX={(v) => axisTick(v, view)}
@@ -443,8 +492,9 @@ export function App() {
                       ? [{ label: 'Power available', values: model.available.power, colorVar: '--ink', directLabel: 'Available' }]
                       : []),
                   ]}
-                  xMax={model.window.xMax}
-                  yMax={model.window.powerMax}
+                  overlay={overlay(second?.model.x ?? [], second?.model.power, 'Power required')}
+                  xMax={win!.xMax}
+                  yMax={win!.powerMax}
                   xLabel={axisLabel(view)}
                   yLabel={`Power (${SYSTEM_UNITS[view.system].power})`}
                   formatX={(v) => axisTick(v, view)}
@@ -466,8 +516,9 @@ export function App() {
                   description="Peaks at minimum drag. Its height depends only on the polar; altitude and weight only move it sideways."
                   x={model.x}
                   series={[{ label: 'L/D', values: model.liftToDrag, colorVar: '--series-1' }]}
-                  xMax={model.window.xMax}
-                  yMax={model.window.liftToDragMax}
+                  overlay={overlay(second?.model.x ?? [], second?.model.liftToDrag, 'L/D')}
+                  xMax={win!.xMax}
+                  yMax={win!.liftToDragMax}
                   xLabel={axisLabel(view)}
                   yLabel="L/D"
                   formatX={(v) => axisTick(v, view)}
@@ -499,9 +550,14 @@ export function App() {
                       : []),
                     { label: 'Power off', values: model.rateOfClimb.powerOff, colorVar: '--series-3', dash: [2, 3], directLabel: 'Power off' },
                   ]}
-                  xMax={model.window.xMax}
-                  yMin={model.window.rocMin}
-                  yMax={model.window.rocMax}
+                  overlay={overlay(
+                    second?.model.rateOfClimb.x ?? [],
+                    second?.model.rateOfClimb.exact ?? second?.model.rateOfClimb.powerOff,
+                    second?.model.rateOfClimb.exact ? 'Full power' : 'Power off',
+                  )}
+                  xMax={win!.xMax}
+                  yMin={win!.rocMin}
+                  yMax={win!.rocMax}
                   xLabel={axisLabel(view)}
                   yLabel="Rate of climb (ft/min)"
                   formatX={(v) => axisTick(v, view)}
@@ -527,8 +583,9 @@ export function App() {
                     description="Best rate of climb at each pressure altitude, at this weight and ISA day: 100 ft/min at the service ceiling, zero at the absolute ceiling. Click to set the altitude."
                     x={model.climb.profile.altitudesFt}
                     series={[{ label: 'Best rate of climb', values: model.climb.profile.rocFpm, colorVar: '--series-1' }]}
-                    xMax={model.window.altitudeMaxFt}
-                    yMax={model.window.rocMax}
+                    overlay={overlay(second?.model.climb?.profile.altitudesFt ?? [], second?.model.climb?.profile.rocFpm, 'Best rate of climb')}
+                    xMax={win!.altitudeMaxFt}
+                    yMax={win!.rocMax}
                     xLabel="Pressure altitude (ft)"
                     yLabel="Best rate of climb (ft/min)"
                     formatX={(v) => num(v)}
@@ -552,6 +609,18 @@ export function App() {
                 )}
               </div>
               <div className="tables">
+                {second && (
+                  <ComparisonTable
+                    rows={second.rows}
+                    first={`${scenario.aircraft.name}${scenario.presetId === null ? ', edited' : ''}`}
+                    second={`${secondName}${state.compare?.presetId === null ? ', edited' : ''}`}
+                  />
+                )}
+                {comparison && 'error' in comparison && (
+                  <div className="card banner banner--error" role="alert">
+                    <strong>The comparison aircraft can't be computed.</strong> {comparison.error}
+                  </div>
+                )}
                 <SpeedsTable model={model} view={view} />
                 {scenario.aircraft.propulsion && (
                   <ClimbPanel model={model} view={view} engine={scenario.aircraft.propulsion} />

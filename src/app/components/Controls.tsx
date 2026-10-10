@@ -489,11 +489,16 @@ export function AircraftPanel({
   onEngine,
   onStructure,
   system,
+  title = 'Aircraft',
+  onRemove,
 }: {
   aircraft: Aircraft;
   presetId: string | null;
   basePresetId: string | null;
   system: UnitSystem;
+  title?: string;
+  /** Shown as a Remove button: for the comparison aircraft */
+  onRemove?: () => void;
   onPreset: (id: PresetId) => void;
   onEdit: (key: AircraftKey, value: number | null) => void;
   onEngine: (engine: Propulsion | undefined) => void;
@@ -504,10 +509,10 @@ export function AircraftPanel({
 
   return (
     <section className="panel-section" aria-labelledby={`${id}-h`}>
-      <h2 id={`${id}-h`}>Aircraft</h2>
+      <h2 id={`${id}-h`}>{title}</h2>
       <div className="select-row">
         <select
-          aria-label="Aircraft preset"
+          aria-label={`${title} preset`}
           value={basePresetId ?? ''}
           onChange={(e) => onPreset(e.target.value as PresetId)}
         >
@@ -525,6 +530,11 @@ export function AircraftPanel({
         {modified && basePresetId !== null && (
           <button type="button" className="link-button" onClick={() => onPreset(basePresetId as PresetId)}>
             Reset
+          </button>
+        )}
+        {onRemove && (
+          <button type="button" className="link-button" onClick={onRemove}>
+            Remove
           </button>
         )}
       </div>
@@ -900,6 +910,25 @@ export function ViewPanel({ view, onChange }: { view: ViewSettings; onChange: (v
         onChange={(system) => onChange({ ...view, system })}
       />
       <p className="hint">{HINTS[view.axis]}</p>
+    </section>
+  );
+}
+
+/** Offers a second aircraft to compare against, when there is none. */
+export function AddComparison({ onAdd }: { onAdd: (id: PresetId) => void }) {
+  const id = useId();
+  return (
+    <section className="panel-section" aria-labelledby={`${id}-h`}>
+      <h2 id={`${id}-h`}>Compare with</h2>
+      <select aria-label="Aircraft to compare with" value="" onChange={(e) => e.target.value && onAdd(e.target.value as PresetId)}>
+        <option value="">None</option>
+        {PRESET_IDS.map((pid) => (
+          <option key={pid} value={pid}>
+            {PRESETS[pid].name}
+          </option>
+        ))}
+      </select>
+      <p className="note">Overlay a second aircraft, editable like the first, on the performance curves.</p>
     </section>
   );
 }

@@ -375,7 +375,9 @@ curve move. A complete product at a tiny scope.
 - [x] Payload–range diagram — *no zero-fuel-mass limit: max payload is the useful load*
 - [ ] Cruise at set power, checked against the 172S POH cruise and range tables
       *(deferred from the Breguet item: needs a part-power fuel-flow model)*
-- [ ] Two-aircraft overlay comparison
+- [x] Two-aircraft overlay comparison — *second aircraft fully editable (`vs.` keys),
+      same condition at the same MTOW fraction, overlaid on the curves tab with a
+      side-by-side table*
 - [ ] Sensitivity analysis panel (finite-difference, deterministic)
 
 ### v1.0 — Polish

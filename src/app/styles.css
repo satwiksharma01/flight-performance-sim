@@ -24,6 +24,7 @@
   --warning: #b77900;
   --good: #0a7d0a;
   --envelope: rgba(42, 120, 214, 0.1);
+  --compare: #8a4fd0;
   --radius: 10px;
   --font: system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
@@ -49,6 +50,7 @@
     --warning: #fab219;
     --good: #0ca30c;
     --envelope: rgba(57, 135, 229, 0.16);
+    --compare: #b088e8;
   }
 }
 
@@ -72,6 +74,7 @@
   --warning: #fab219;
   --good: #0ca30c;
   --envelope: rgba(57, 135, 229, 0.16);
+  --compare: #b088e8;
 }
 
 *,
