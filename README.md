@@ -136,12 +136,12 @@ cross-check on every push, and deploys to GitHub Pages when they pass. See [ROAD
 
 ## Validation
 
-The **Validation** page (`validation.html`) lists 44 published figures from four
+The **Validation** page (`validation.html`) lists 48 published figures from four
 sources: the US Standard Atmosphere 1976 tables, NACA Report 1135, Anderson's worked
 examples, and the Cessna 172S POH. Each shows published value, model value,
 difference, tolerance and status, computed live in the browser. Below them are the
-172S POH's climb, takeoff and landing tables, all 207 cells, each coloured by the
-model's error.
+172S POH's climb, takeoff, landing and cruise tables, all 429 cells, each coloured by
+the model's error.
 
 Every figure has a role, because "matches published data" means different things:
 
@@ -162,9 +162,13 @@ What the 172S comparison says, in brief:
 - **Range and endurance:** Anderson's CP-1 example (*Introduction to Flight*, 8th ed.,
   Example 6.19), 1,207 mi and 14.4 h, reproduced to within 0.25 %.
 - **Limits:** `V_A` at all three published weights within 1.3 kt, never fitted.
-- **Climb:** within 5 % at sea level; 10–18 % low at altitude on cold days.
-- **Takeoff:** 11–20 % short, a pinned discrepancy. The growth with density altitude
-  is right to 8 %, which is what a hot-and-high calculation needs.
+- **Cruise at a set power:** 105 of the POH's 111 cruise speeds within 3 %, mean
+  −0.7 %, from one fitted figure; the six misses are low power on hot days high up.
+  Fuel flow within 2 % in every cell. Range and time aloft at 75 % and 45 % power,
+  counted the POH's way, within 2.6 %.
+- **Climb:** within 4 % at sea level; up to 13 % low at altitude on cold days.
+- **Takeoff:** 14–21 % short, a pinned discrepancy. The growth with density altitude
+  is right to 7 %, which is what a hot-and-high calculation needs.
 - **Landing ground roll:** 21 % short, uniformly: Gudmundsson's braking coefficient
   for dry pavement (0.4) against the 0.29 the POH implies.
 
@@ -173,7 +177,7 @@ What the 172S comparison says, in brief:
 ```bash
 npm install
 npm run dev          # the explorer at http://localhost:5173, validation at /validation.html
-npm test             # 399 tests
+npm test             # 407 tests
 npm run validate     # cross-check against the independent Python reference (needs SciPy)
 npm run typecheck
 npm run build        # static site in dist/, relative paths, any host
@@ -208,7 +212,7 @@ npm run build        # static site in dist/, relative paths, any host
 | `src/data/validation/` | The validation dataset, the POH tables, and the cross-check's last run |
 | `src/app/components/` | React controls, readouts, and the uPlot chart with its marker overlays |
 
-399 tests, covering the published ISA table at five altitudes, layer continuity,
+407 tests, covering the published ISA table at five altitudes, layer continuity,
 profile inversion, every closed-form optimum cross-checked against a brute-force
 scan, permalink round-trip stability, and the chart model's physics: the drag curve
 is identical against EAS at every altitude and slides right by `sqrt(ρ₀/ρ)` against

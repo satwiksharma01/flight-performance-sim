@@ -186,20 +186,29 @@ function errorClass(error: number | null): string {
 
 const POH_NOTE: Record<PohTable['id'], string> = {
   climb:
-    'Good at sea level, 10–18 % low at altitude on cold days. The hot side is close since the engine lapse was corrected for temperature in v0.5: before, the hot cells missed by up to 66 %.',
+    'Good at sea level, up to 13 % low at altitude on cold days. The hot side is close since the engine lapse was corrected for temperature in v0.5: before, the hot cells missed by up to 66 %.',
   'takeoff-roll':
-    '11–20 % short everywhere, worsening with heat: a fixed shortfall in low-speed thrust, plus a temperature effect still a little weak.',
+    '14–21 % short everywhere, worsening with heat: a fixed shortfall in low-speed thrust, plus a temperature effect still a little weak.',
   'takeoff-total': 'The ground roll’s shortfall carried through, and a climb to 50 ft a little steeper than the POH’s.',
   'landing-roll':
     'A uniform 20–24 % short at every altitude and temperature: the braking coefficient (0.4 here, about 0.29 in the POH), not the density effect.',
   'landing-total':
     'Within 11 %, but partly by compensation: the 3° approach is longer than the POH’s steeper power-idle one, and the braking shorter. Read the ground roll, not this.',
+  'cruise-speed':
+    'Within 3 % in 105 of 111 cells, though one figure alone, 124 KTAS at 75 % and 8,500 ft, set the powered CD₀. The misses, to −11 %, are low power on hot days high up: near the bottom of the power curve, where 3 % less power costs 10 % of the speed. On the glide-fitted polar every cell was 11–22 % slow.',
+  'cruise-fuel':
+    'Within 2 % everywhere: fuel flow is a straight line in power. Two cells set the line, 10.5 GPH at 77 % and 6.6 GPH at 44 % (2,000 and 12,000 ft, standard); the other 109 are checks. The best constant SFC misses by up to 0.56 GPH.',
 };
 
 function PohGrid({ table, cells }: { table: PohTable; cells: readonly CellResult[] }) {
   const summary = summarise(cells);
-  const at = (h: number, t: number) => cells.find((c) => c.altitude === h && c.temperature === t);
-  const pct = (e: number) => `${e > 0 ? '+' : e < 0 ? '−' : ''}${Math.abs(e * 100).toFixed(0)}`;
+  const at = (i: number, j: number) => cells.find((c) => c.row === i && c.column === j);
+  const isa = table.columns === 'isa';
+  const column = (t: number) => (!isa ? String(t) : t === 0 ? 'std' : t > 0 ? `+${t}` : `−${-t}`);
+  const pct = (e: number) => {
+    const r = Math.round(e * 100);
+    return `${r > 0 ? '+' : r < 0 ? '−' : ''}${Math.abs(r)}`;
+  };
   return (
     <div className="poh-grid">
       <h3>{table.title}</h3>
@@ -210,26 +219,30 @@ function PohGrid({ table, cells }: { table: PohTable; cells: readonly CellResult
         <table className="validation-table poh-table">
           <thead>
             <tr>
-              <th scope="col" title="Pressure altitude [ft] by OAT [°C]">ft \ °C</th>
+              {isa ? (
+                <th scope="col" title="Pressure altitude [ft] and RPM, by ISA deviation [°C]">ft · rpm \ ISA</th>
+              ) : (
+                <th scope="col" title="Pressure altitude [ft] by OAT [°C]">ft \ °C</th>
+              )}
               {table.temperatures.map((t) => (
                 <th key={t} scope="col" className="n">
-                  {t}
+                  {column(t)}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {table.altitudes.map((h) => (
-              <tr key={h}>
-                <th scope="row">{h === 0 ? 'SL' : h.toLocaleString('en-US')}</th>
-                {table.temperatures.map((t) => {
-                  const cell = at(h, t);
+            {table.altitudes.map((h, i) => (
+              <tr key={table.rows?.[i] ?? h}>
+                <th scope="row">{table.rows?.[i] ?? (h === 0 ? 'SL' : h.toLocaleString('en-US'))}</th>
+                {table.temperatures.map((t, j) => {
+                  const cell = at(i, j);
                   if (!cell) return <td key={t} className="n dim">–</td>;
                   return (
                     <td
                       key={t}
                       className={`n ${errorClass(cell.error)}`}
-                      title={`Model ${cell.model === null ? '–' : Math.round(cell.model).toLocaleString('en-US')}, POH ${cell.published.toLocaleString('en-US')} ${table.unit}`}
+                      title={`Model ${cell.model === null ? '–' : cell.model.toLocaleString('en-US', { maximumFractionDigits: cell.published < 50 ? 1 : 0 })}, POH ${cell.published.toLocaleString('en-US')} ${table.unit}`}
                     >
                       {cell.error === null ? 'n/a' : `${pct(cell.error)} %`}
                     </td>
@@ -340,9 +353,10 @@ export function ValidationPage() {
       <section className="card table-card" aria-labelledby="poh-h" id="poh-tables">
         <h2 id="poh-h">Cessna 172S POH tables, every cell</h2>
         <p className="card-sub">
-          The single figures above are the headlines. These are the rest of the evidence: the POH&apos;s climb, takeoff and
-          landing tables at 2,550 lb, transcribed whole, with the model&apos;s error in each cell. Nothing here was fitted,
-          and no cell is left out. Hover a cell for both values.
+          The single figures above are the headlines. These are the rest of the evidence: the POH&apos;s climb, takeoff,
+          landing and cruise tables at 2,550 lb, transcribed whole, with the model&apos;s error in each cell. Nothing here
+          was fitted except two fuel-flow cells, named below the fuel table, and no cell is left out. Hover a cell for
+          both values.
         </p>
         <div className="err-key" aria-hidden="true">
           <span className="err err--0">within 5 %</span>

@@ -25,7 +25,7 @@ import { cruiseSpeed } from '../../physics/performance/cruise.js';
 import { BSFC_LB_PER_HP_H } from '../../physics/propulsion.js';
 import { vnDiagram, type StructuralLimits } from '../../physics/performance/vn.js';
 import { CESSNA_172S } from '../aircraft/presets.js';
-import { POH_SOURCE, pohCondition } from './poh-c172s.js';
+import { POH_SOURCE, pohCondition, pohRange } from './poh-c172s.js';
 
 export type Role = 'reference' | 'calibration' | 'check' | 'discrepancy';
 
@@ -49,7 +49,7 @@ export interface ValidationCase {
   readonly note?: string;
 }
 
-export type GroupId = 'atmosphere' | 'compressible' | 'textbook' | 'c172' | 'c172-field';
+export type GroupId = 'atmosphere' | 'compressible' | 'textbook' | 'c172' | 'c172-field' | 'c172-cruise';
 
 export interface ValidationGroup {
   readonly id: GroupId;
@@ -87,6 +87,12 @@ export const GROUPS: readonly ValidationGroup[] = [
     title: 'Cessna 172S: limits, takeoff and landing',
     intro:
       'The V-n diagram’s speeds and the short-field distances, against POH sections 2 and 5. Speeds here are KCAS, from the POH’s own KCAS columns. Distances use Raymer’s method with Gudmundsson’s friction for dry pavement, and nothing is fitted to them: where they miss, the miss is pinned with its cause. The full POH tables, cell by cell, follow.',
+  },
+  {
+    id: 'c172-cruise',
+    title: 'Cessna 172S: range and endurance at a set power',
+    intro:
+      'The specifications page’s figures, counted as the POH counts them: 53 gallons, less 1.4 for start, taxi and takeoff, the climb’s fuel from figure 5-7, and a 45-minute reserve, at 2,550 lb on a standard day. The climb’s time, fuel and distance are the POH’s; the cruise speed and fuel flow are the model’s. The cruise table follows, cell by cell.',
   },
 ];
 
@@ -597,6 +603,40 @@ export const CASES: readonly ValidationCase[] = [
     source: POH_SOURCE,
     note: 'Touchdown speed in true airspeed grows as 1/√σ; the braking error cancels in the ratio.',
   },
+  ...(
+    [
+      [75, 8500, 518, 4.26, 'Its cruise speed is the CD₀ calibration, so this checks the fuel flow, the fuel line’s value at 75 %.'],
+      [45, 10000, 638, 6.72, 'At 45 % the cruise speed is a check too: the cruise table has the model 2 % slow near this power and altitude.'],
+    ] as const
+  ).flatMap(([percent, feet, nm, hours, note]): ValidationCase[] => [
+    {
+      id: `c172-range-${percent}`,
+      group: 'c172-cruise',
+      quantity: 'Range',
+      condition: `${percent} % power, ${feet.toLocaleString('en-US')} ft, 45 min reserve`,
+      role: 'check',
+      published: nm,
+      unit: 'NM',
+      decimals: 0,
+      model: () => pohRange(feet, percent / 100)!.range,
+      tolerance: { relative: 0.03 },
+      source: SOURCE.poh,
+      note,
+    },
+    {
+      id: `c172-time-${percent}`,
+      group: 'c172-cruise',
+      quantity: 'Time aloft',
+      condition: `${percent} % power, ${feet.toLocaleString('en-US')} ft, 45 min reserve`,
+      role: 'check',
+      published: hours,
+      unit: 'h',
+      decimals: 2,
+      model: () => pohRange(feet, percent / 100)!.hours,
+      tolerance: { relative: 0.03 },
+      source: SOURCE.poh,
+    },
+  ]),
 ];
 
 export interface Evaluated {

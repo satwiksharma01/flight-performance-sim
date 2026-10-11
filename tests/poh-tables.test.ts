@@ -16,6 +16,8 @@ const BANDS: Record<string, readonly [number, number]> = {
   'takeoff-total': [-0.27, -0.1],
   'landing-roll': [-0.26, -0.18],
   'landing-total': [-0.1, 0.15],
+  'cruise-speed': [-0.11, 0.03],
+  'cruise-fuel': [-0.015, 0.02],
 };
 
 describe('POH tables, cell by cell', () => {
@@ -32,8 +34,21 @@ describe('POH tables, cell by cell', () => {
     }, 60_000);
   }
 
-  it('transcribes the tables whole: 27 climb cells and 45 in each distance table', () => {
-    expect(POH_TABLES.map((t) => compareTable(t).length)).toEqual([27, 45, 45, 45, 45]);
+  it('transcribes the tables whole: 27 climb cells, 45 in each distance table, 111 in each cruise table', () => {
+    expect(POH_TABLES.map((t) => compareTable(t).length)).toEqual([27, 45, 45, 45, 45, 111, 111]);
+  });
+
+  it('reproduces the two cruise cells the fuel-flow line was fitted to', () => {
+    const fuel = compareTable(POH_TABLES.find((t) => t.id === 'cruise-fuel')!);
+    const cell = (feet: number, rpm: string) => fuel.find((c) => c.column === 1 && POH_TABLES[6]!.rows![c.row] === `${feet.toLocaleString('en-US')} · ${rpm}`)!;
+    expect(cell(2000, '2550').model).toBeCloseTo(10.5, 10);
+    expect(cell(12000, '2300').model).toBeCloseTo(6.6, 10);
+  });
+
+  it('has the cruise speed within 3 % in all but the six low-power hot cells high up', () => {
+    const misses = compareTable(POH_TABLES.find((t) => t.id === 'cruise-speed')!).filter((c) => Math.abs(c.error!) > 0.03);
+    expect(misses).toHaveLength(6);
+    for (const c of misses) expect(c.published).toBeLessThanOrEqual(100); // the slow end of the table
   });
 
   it('agrees with the specifications page, which is the tables at 15 °C', () => {
