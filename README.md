@@ -16,6 +16,8 @@ table by table.
 
 **Live:** [satwiksharma01.github.io/flight-performance-sim](https://satwiksharma01.github.io/flight-performance-sim/) · [validation](https://satwiksharma01.github.io/flight-performance-sim/validation.html)
 
+[Design notes](#design-notes) · [Contributing](CONTRIBUTING.md)
+
 **Status:** v0.6, cruise and comparison. Five tabs: performance curves, the envelope
 (V-n diagram, turn performance, P_s contours), takeoff and landing, range, and
 sensitivity, and a second aircraft can be overlaid for comparison. A
