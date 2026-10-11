@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { atPressureAltitude } from '../src/physics/atmosphere.js';
-import { clMinDrag, k, maxLiftToDrag } from '../src/physics/aero.js';
+import { clMinDrag, k, maxLiftToDrag, powerOff } from '../src/physics/aero.js';
+import { climbPerformance, type PoweredAircraft } from '../src/physics/performance/climb.js';
 import { bestGlide, bestGlideInWind, glideAtCl, minimumSink } from '../src/physics/performance/glide.js';
 import { CESSNA_172S, GENERIC_SAILPLANE } from '../src/data/aircraft/presets.js';
 
@@ -73,5 +74,23 @@ describe('glide in wind', () => {
 
   it('reports no progress into a wind faster than the aircraft', () => {
     expect(bestGlideInWind(GLIDER, SL, 200)).toBeNull();
+  });
+});
+
+describe('power off', () => {
+  it('glides the 172 on its power-off polar, the windmilling propeller included', () => {
+    // The POH's 9:1 at 68 KIAS is the power-off polar; under power (L/D)max is 11.4.
+    expect(powerOff(CESSNA_172S).cd0).toBeCloseTo(0.052, 12);
+    expect(bestGlide(CESSNA_172S, SL).glideRatio).toBeCloseTo(maxLiftToDrag(powerOff(CESSNA_172S)), 12);
+    expect(maxLiftToDrag(CESSNA_172S)).toBeGreaterThan(11);
+  });
+
+  it('keeps the windmilling drag out of powered flight', () => {
+    const { windmillCd0: _w, ...none } = CESSNA_172S;
+    expect(climbPerformance(CESSNA_172S as PoweredAircraft, SL)).toEqual(climbPerformance(none as PoweredAircraft, SL));
+  });
+
+  it('changes nothing for an aircraft with no windmilling drag', () => {
+    expect(powerOff(GLIDER)).toBe(GLIDER);
   });
 });

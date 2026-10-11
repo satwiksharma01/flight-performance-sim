@@ -53,11 +53,13 @@ describe('elasticities against the closed forms', () => {
     const glide = minimumSink(aircraft, atPressureAltitude(0));
     expect(glide.limitedByStall).toBe(true);
     const induced = k(aircraft) * aircraft.clMax ** 2;
-    const cd = aircraft.cd0 + induced;
+    const cd0 = aircraft.cd0 + aircraft.windmillCd0!; // power off
+    const cd = cd0 + induced;
     const share = 1 - 1.5 * Math.sin(glide.gamma) ** 2;
     const e = of(DEFAULT_SCENARIO, 'sink');
     expect(e.weight).toBeCloseTo(0.5, close);
-    expect(e['CD₀']).toBeCloseTo((share * aircraft.cd0) / cd, close);
+    // CD0 and the windmilling drag share the parasite part between them.
+    expect(e['CD₀']! + e['windmilling drag']!).toBeCloseTo((share * cd0) / cd, close);
     expect(e['aspect ratio']).toBeCloseTo((-share * induced) / cd, close);
     expect(e['clean CLmax']).toBeCloseTo(-0.5 + share * ((2 * induced) / cd - 1), close);
   });

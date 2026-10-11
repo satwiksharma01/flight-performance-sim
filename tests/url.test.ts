@@ -274,6 +274,14 @@ describe('structural limits, takeoff flap and runway', () => {
     expect(scenario.presetId).toBeNull();
   });
 
+  it('removes the 172’s windmilling drag with cd0w=none, and sets it with a number', () => {
+    expect(decodeScenario('ac=c172&cd0w=none').scenario.aircraft.windmillCd0).toBeUndefined();
+    const set = decodeScenario('ac=c172&cd0w=0.03');
+    expect(set.problems).toEqual([]);
+    expect(set.scenario.aircraft.windmillCd0).toBe(0.03);
+    expect(decodeScenario(encodeScenario(set.scenario)).scenario.aircraft.windmillCd0).toBe(0.03);
+  });
+
   it('round-trips a custom aircraft without limits or takeoff flap', () => {
     const { structure: _s, clMaxTakeoff: _t, clMaxFlaps: _f, ...bare } = CESSNA_172S;
     const scenario: Scenario = {

@@ -109,9 +109,9 @@ describe('payload-range', () => {
     expect(payloadRange(noTanks, rho)).toBeNull();
   });
 
-  it('flies the 172 about 690 NM on its 53 gallons, Breguet at best L/D with no reserve', () => {
-    // The POH's 638 NM is at 45 % power with a 45-minute reserve: a different
-    // calculation, compared in a later release.
-    expect(breguet(c172, rho, c172.fuelCapacity!)!.range.value / 1852).toBeCloseTo(694, -1);
+  it('flies the 172 about 880 NM on its 53 gallons, Breguet at best L/D with no reserve', () => {
+    // At the powered (L/D)max of 11.4. The POH's 638 NM is at 45 % power with
+    // a 45-minute reserve: a different calculation, compared in a later release.
+    expect(breguet(c172, rho, c172.fuelCapacity!)!.range.value / 1852).toBeCloseTo(877, -1);
   });
 });

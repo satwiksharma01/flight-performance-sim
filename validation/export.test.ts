@@ -19,6 +19,7 @@ import { RUNWAY_SURFACES, landing, takeoff } from '../src/physics/performance/fi
 import { liftLimitedLoadFactor, sustainedLoadFactor } from '../src/physics/performance/turn.js';
 import { vnBoundaries, vnDiagram } from '../src/physics/performance/vn.js';
 import { breguet } from '../src/physics/performance/range.js';
+import { cruiseSpeed } from '../src/physics/performance/cruise.js';
 import type { Aircraft } from '../src/physics/aero.js';
 
 /** Engines no preset uses, so every model is checked. */
@@ -159,9 +160,21 @@ it('exports the sweep', () => {
     }),
   );
 
+  // Level flight at a set power or thrust, for every powered aircraft.
+  const setPower = Object.entries(all).flatMap(([id, ac]) =>
+    isPowered(ac)
+      ? [0, 2500, 6000].flatMap((h) =>
+          [0.45, 0.65, 0.85].map((setting) => {
+            const atm = atPressureAltitude(h);
+            return { id, ac, h, rho: atm.density, setting, tas: cruiseSpeed(ac, atm, setting) };
+          }),
+        )
+      : [],
+  );
+
   mkdirSync(OUT, { recursive: true });
   writeFileSync(
     join(OUT, 'ts-output.json'),
-    JSON.stringify({ atmosphere, aero, performance, ceilings: ceilingRows, envelope, turns, field, cruise }, null, 1),
+    JSON.stringify({ atmosphere, aero, performance, ceilings: ceilingRows, envelope, turns, field, cruise, setPower }, null, 1),
   );
 });

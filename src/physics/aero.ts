@@ -24,8 +24,13 @@ export interface Aircraft {
   readonly aspectRatio: number;
   /** Oswald span efficiency factor [-] */
   readonly oswaldEfficiency: number;
-  /** Zero-lift drag coefficient [-] */
+  /** Zero-lift drag coefficient, power on [-] */
   readonly cd0: number;
+  /**
+   * Zero-lift drag the windmilling propeller adds power off [-]. A fixed-pitch
+   * propeller at idle is a drag brake: the 172's POH glide shows it. Absent: none
+   */
+  readonly windmillCd0?: number;
   /** Maximum lift coefficient, clean [-] */
   readonly clMax: number;
   /** Maximum lift coefficient, full flap [-] */
@@ -242,12 +247,22 @@ export const AIRCRAFT_LIMITS: Record<LimitedField, { readonly label: string; rea
   aspectRatio: { label: 'Aspect ratio', min: 0.5, max: 50 },
   oswaldEfficiency: { label: 'Oswald efficiency', min: 0.1, max: 1 },
   cd0: { label: 'CD0', min: 1e-4, max: 0.5 },
+  windmillCd0: { label: 'Windmilling drag', min: 1e-4, max: 0.5 },
   clMax: { label: 'CLmax', min: 0.05, max: 5 },
   clMaxFlaps: { label: 'CLmax with flaps', min: 0.05, max: 6 },
   clMaxTakeoff: { label: 'CLmax, takeoff flap', min: 0.05, max: 6 },
   emptyMass: { label: 'Empty mass', min: 0.05, max: 1e6 },
   fuelCapacity: { label: 'Fuel capacity', min: 0.01, max: 5e5 },
 };
+
+/**
+ * The aircraft power off, as it glides or lands: the windmilling propeller's
+ * drag added to CD0. Everything powered (climb, cruise, takeoff) uses the
+ * aircraft as it is.
+ */
+export function powerOff(aircraft: Aircraft): Aircraft {
+  return aircraft.windmillCd0 ? { ...aircraft, cd0: aircraft.cd0 + aircraft.windmillCd0 } : aircraft;
+}
 
 /** Validate an aircraft definition, returning one human-readable problem per bad field. */
 export function validateAircraft(aircraft: Aircraft): string[] {

@@ -45,8 +45,8 @@ describe('envelope tab', () => {
     const e = m.energy!;
     const zero = e.contours.find((c) => c.level === 0)!;
     const top = Math.max(...zero.lines.flat().map(([, y]) => y));
-    expect(top).toBeGreaterThan(15_500); // absolute ceiling 16,291 ft; the grid is 290 ft per row
-    expect(top).toBeLessThan(16_400);
+    expect(top).toBeGreaterThan(15_800); // absolute ceiling 16,627 ft; the grid is 290 ft per row
+    expect(top).toBeLessThan(16_700);
     // Best climb at sea level is V_y, 74 KIAS.
     expect(e.bestClimb[0]![0]).toBeCloseTo(74, -1);
     expect(e.energyHeights).toEqual([]); // a light single's kinetic energy is too small to draw

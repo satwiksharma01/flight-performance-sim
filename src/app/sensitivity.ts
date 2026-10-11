@@ -92,6 +92,7 @@ const FIELDS = [
   ['aspectRatio', 'aspect ratio'],
   ['oswaldEfficiency', 'Oswald efficiency'],
   ['cd0', 'CD₀'],
+  ['windmillCd0', 'windmilling drag'],
   ['clMax', 'clean CLmax'],
   ['clMaxTakeoff', 'takeoff-flap CLmax'],
   ['clMaxFlaps', 'landing-flap CLmax'],

@@ -101,6 +101,7 @@ const KEY = {
   aspectRatio: 'ar',
   oswaldEfficiency: 'e',
   cd0: 'cd0',
+  windmillCd0: 'cd0w',
   clMax: 'clmax',
   clMaxFlaps: 'clf',
   clMaxTakeoff: 'clto',
@@ -210,6 +211,7 @@ function sameAircraft(a: Aircraft, b: Aircraft): boolean {
     samePropulsion(a.propulsion, b.propulsion) &&
     sameStructure(a.structure, b.structure) &&
     sameNumber(a.clMaxTakeoff, b.clMaxTakeoff) &&
+    sameNumber(a.windmillCd0, b.windmillCd0) &&
     sameNumber(a.emptyMass, b.emptyMass) &&
     sameNumber(a.fuelCapacity, b.fuelCapacity) &&
     a.name === b.name &&
@@ -256,6 +258,7 @@ export function encodeScenario(scenario: Scenario): string {
   for (const [key, field] of [
     [KEY.clMaxFlaps, 'clMaxFlaps'],
     [KEY.clMaxTakeoff, 'clMaxTakeoff'],
+    [KEY.windmillCd0, 'windmillCd0'],
     [KEY.emptyMass, 'emptyMass'],
     [KEY.fuelCapacity, 'fuelCapacity'],
   ] as const) {
@@ -484,7 +487,7 @@ function readStructure(params: URLSearchParams, aircraft: Aircraft, problems: st
 function readOptional(
   params: URLSearchParams,
   key: string,
-  field: 'clMaxFlaps' | 'clMaxTakeoff' | 'emptyMass' | 'fuelCapacity',
+  field: 'clMaxFlaps' | 'clMaxTakeoff' | 'windmillCd0' | 'emptyMass' | 'fuelCapacity',
   aircraft: Aircraft,
   problems: string[],
 ): Aircraft {
@@ -555,6 +558,7 @@ export function decodeScenario(query: string): DecodeResult {
 
   aircraft = readOptional(params, KEY.clMaxFlaps, 'clMaxFlaps', aircraft, problems);
   aircraft = readOptional(params, KEY.clMaxTakeoff, 'clMaxTakeoff', aircraft, problems);
+  aircraft = readOptional(params, KEY.windmillCd0, 'windmillCd0', aircraft, problems);
   aircraft = readOptional(params, KEY.emptyMass, 'emptyMass', aircraft, problems);
   aircraft = readOptional(params, KEY.fuelCapacity, 'fuelCapacity', aircraft, problems);
 

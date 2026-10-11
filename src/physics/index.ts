@@ -20,3 +20,4 @@ export * from './performance/vn.js';
 export * from './performance/energy.js';
 export * from './performance/field.js';
 export * from './performance/range.js';
+export * from './performance/cruise.js';

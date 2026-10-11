@@ -72,9 +72,11 @@ describe('propeller thrust', () => {
   });
 
   it('implies a plausible efficiency for the 172S propeller in the climb', () => {
-    // 74 KIAS, best rate of climb: fixed-pitch propellers run 0.6-0.8 here.
+    // 74 KIAS, best rate of climb. This is thrust power over *rated* power: at
+    // full throttle a fixed-pitch propeller holds the engine below its rated
+    // RPM, so it reads under the propeller's own 0.6-0.8.
     const eta = propellerEfficiency(CESSNA_172S.propulsion!, 74 * (1852 / 3600))!;
-    expect(eta).toBeGreaterThan(0.6);
+    expect(eta).toBeGreaterThan(0.55);
     expect(eta).toBeLessThan(0.85);
   });
 });

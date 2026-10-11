@@ -28,7 +28,7 @@
 
 import { G0 } from '../constants.js';
 import type { AtmosphereState } from '../atmosphere.js';
-import { k, stallSpeed, weight, type Aircraft } from '../aero.js';
+import { k, powerOff, stallSpeed, weight, type Aircraft } from '../aero.js';
 import { lapseRatio, thrustAvailable } from '../propulsion.js';
 
 /** Friction coefficients of a runway surface [-]. */
@@ -257,7 +257,8 @@ export function landing(aircraft: Aircraft, atmosphere: AtmosphereState, runway:
   const freeRoll = (vtd - headwind) * t.freeRollTime;
 
   const cl = groundLiftCoefficient(aircraft, runway.rolling, clMaxLanding, t.touchdown);
-  const cd = aircraft.cd0 + k(aircraft) * cl * cl;
+  // Engine at idle: the windmilling propeller's drag helps the brakes.
+  const cd = powerOff(aircraft).cd0 + k(aircraft) * cl * cl;
   const decel = (v: number) => {
     const qs = 0.5 * density * v * v * s;
     const lift = v > 0 ? qs * cl : 0;

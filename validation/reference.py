@@ -175,6 +175,11 @@ def polar(ac):
     return ac["cd0"], k
 
 
+def power_off(ac):
+    """Power off, the windmilling propeller's drag joins CD0."""
+    return {**ac, "cd0": ac["cd0"] + ac.get("windmillCd0", 0.0)}
+
+
 def drag_for_lift(ac, v, rho, lift):
     cd0, k = polar(ac)
     q = 0.5 * rho * v * v
@@ -229,6 +234,7 @@ def glide_at(ac, rho, cl):
 
 
 def glides(ac, rho):
+    ac = power_off(ac)
     cd0, k = polar(ac)
     best = glide_at(ac, rho, min(math.sqrt(cd0 / k), ac["clMax"]))
     b = dict(bounds=(1e-3, ac["clMax"]), method="bounded", options=dict(xatol=1e-12))
@@ -359,7 +365,7 @@ def field_reference(ac, rho, lap, runway, wind):
     hf = min(R_ * (1 - math.cos(th)), OBSTACLE)
     air = (OBSTACLE - hf) / math.tan(th) * (va - wind) / va + R_ * math.sin(th) * (vf - wind) / vf
     cl = min(runway["rolling"] / (2 * k), clmax_ldg / 1.15 ** 2)
-    cd = cd0 + k * cl * cl
+    cd = power_off(ac)["cd0"] + k * cl * cl  # engine at idle
 
     def dec(v):
         q = 0.5 * rho * v * v * S
@@ -372,6 +378,23 @@ def field_reference(ac, rho, lap, runway, wind):
 
 
 # --- Range and endurance -------------------------------------------------------
+
+def cruise_speed(ac, rho, setting):
+    """The faster root of thrust = drag at a set power (propeller efficiency 0.8) or thrust."""
+    eng = ac["propulsion"]
+    W = ac["mass"] * G0
+    jet = eng["kind"] == "turbofan"
+    T = (lambda v: setting * eng["thrust"]) if jet else (lambda v: 0.8 * setting * eng["power"] / v)
+    f = lambda v: T(v) - drag_for_lift(ac, v, rho, W)
+    cd0, k = polar(ac)
+    vmd = math.sqrt(2 * W / (rho * ac["wingArea"])) * (k / cd0) ** 0.25
+    # Found by minimiser, not the closed form: excess thrust peaks at V_md, excess power at V_mp.
+    peak = minimize_scalar(lambda v: -f(v) * (1 if jet else v), bounds=(0.3 * vmd, 3 * vmd),
+                           method="bounded", options=dict(xatol=1e-10 * vmd)).x
+    if f(peak) <= 0:
+        return None
+    return brentq(f, peak, 50 * vmd, xtol=1e-14)
+
 
 def cruise_reference(ac, rho, fuel, cl_range, cl_endurance):
     """Integrate dR = V dW / flow and dt = dW / flow, at constant CL, over the fuel burned."""
@@ -415,6 +438,7 @@ TOLERANCE = {
     "specific excess power": 1e-12,
     "takeoff distances": 1e-7, "landing distances": 1e-7,  # Simpson in speed vs DOP853 in time
     "Breguet range": 1e-10, "Breguet endurance": 1e-10,    # closed form vs quadrature
+    "cruise speed": 1e-9,         # bisection vs brentq
 }
 
 
@@ -563,6 +587,11 @@ def main(path):
         where = f"{row['id']} at {row['h']} m"
         track("Breguet range", r["range"]["value"], rng, where)
         track("Breguet endurance", r["endurance"]["value"], end, where)
+
+    for row in ts["setPower"]:
+        ref = cruise_speed(row["ac"], row["rho"], row["setting"])
+        if ref is not None and row["tas"] is not None:
+            track("cruise speed", row["tas"], ref, f"{row['id']} at {row['h']} m, setting {row['setting']}")
 
     failed = False
     print("TypeScript core vs independent reference: worst disagreement")

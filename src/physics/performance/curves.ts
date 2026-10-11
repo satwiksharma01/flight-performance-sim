@@ -139,10 +139,13 @@ const MARKER_SIGNIFICANCE: Record<MarkerKind, string> = {
     'the lift coefficient required exceeds CLmax and level flight is impossible.',
   'min-power':
     'Minimum power required, at CL = sqrt(3*CD0/k). Best endurance for a propeller ' +
-    'aircraft, and the minimum-sink speed in a glide.',
+    'aircraft. Power off it is the minimum-sink speed too, unless a windmilling ' +
+    'propeller adds drag: the glide readout has the power-off figure.',
   'min-drag':
     'Minimum drag and maximum L/D, at CL = sqrt(CD0/k). Parasite and induced drag are ' +
-    'equal here. Best glide range, and best range for a propeller aircraft.',
+    'equal here. Best range for a propeller aircraft. Power off it is the best-glide ' +
+    'speed too, unless a windmilling propeller adds drag: the glide readout has the ' +
+    'power-off figure.',
   'jet-range':
     'Maximum CL^(1/2)/CD. Best range for a jet — notably faster than best L/D, which ' +
     'is where a propeller aircraft achieves its best range instead.',

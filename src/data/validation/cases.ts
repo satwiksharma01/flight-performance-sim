@@ -17,10 +17,11 @@
 
 import { atPressureAltitude } from '../../physics/atmosphere.js';
 import { pitotPressureRatio } from '../../physics/airspeed.js';
-import { maxLiftToDrag, stallSpeed, vMinDrag, type Aircraft } from '../../physics/aero.js';
+import { maxLiftToDrag, powerOff, stallSpeed, vMinDrag, type Aircraft } from '../../physics/aero.js';
 import { ceilings, climbPerformance, type PoweredAircraft } from '../../physics/performance/climb.js';
 import { RUNWAY_SURFACES, landing, takeoff } from '../../physics/performance/field.js';
 import { breguet } from '../../physics/performance/range.js';
+import { cruiseSpeed } from '../../physics/performance/cruise.js';
 import { BSFC_LB_PER_HP_H } from '../../physics/propulsion.js';
 import { vnDiagram, type StructuralLimits } from '../../physics/performance/vn.js';
 import { CESSNA_172S } from '../aircraft/presets.js';
@@ -79,7 +80,7 @@ export const GROUPS: readonly ValidationGroup[] = [
     id: 'c172',
     title: 'Cessna 172S against its POH',
     intro:
-      '2,550 lb, sea level, standard day, clean. Each fitted parameter takes exactly two published figures; the checks are figures the fit never used. POH speeds are KIAS: at these speeds the 172S’s position error is about a knot, so KIAS ≈ KCAS, and at sea level KCAS = KTAS.',
+      '2,550 lb, standard day, clean, at sea level unless the condition says otherwise. Each fitted parameter takes one published figure; the checks are figures the fit never used. POH speeds are KIAS: at these speeds the 172S’s position error is about a knot, so KIAS ≈ KCAS, and at sea level KCAS = KTAS.',
   },
   {
     id: 'c172-field',
@@ -368,10 +369,10 @@ export const CASES: readonly ValidationCase[] = [
     published: 68,
     unit: 'kt',
     decimals: 1,
-    model: () => vMinDrag(c172, seaLevel().density) / KT,
+    model: () => vMinDrag(powerOff(c172), seaLevel().density) / KT,
     tolerance: { absolute: 0.5 },
     source: SOURCE.poh,
-    note: 'With the glide ratio, sets CD₀ = 0.052 and e = 0.717.',
+    note: 'With the glide ratio, sets e = 0.717 and the power-off CD₀ = 0.052.',
   },
   {
     id: 'c172-glide-ratio',
@@ -382,10 +383,24 @@ export const CASES: readonly ValidationCase[] = [
     published: 9,
     unit: ': 1',
     decimals: 2,
-    model: () => maxLiftToDrag(c172),
+    model: () => maxLiftToDrag(powerOff(c172)),
     tolerance: { absolute: 0.05 },
     source: SOURCE.poh,
     note: 'Read from the POH maximum-glide chart.',
+  },
+  {
+    id: 'c172-cruise-speed',
+    group: 'c172',
+    quantity: 'Cruise speed',
+    condition: '75 % power, 8,500 ft, standard day',
+    role: 'calibration',
+    published: 124,
+    unit: 'kt',
+    decimals: 1,
+    model: () => cruiseSpeed(c172, atPressureAltitude(8500 * FT), 0.75)! / KT,
+    tolerance: { absolute: 0.5 },
+    source: SOURCE.poh,
+    note: 'Sets CD₀ under power, 0.0326, at the cruise propeller efficiency of 0.8. The glide’s 0.052 is this plus 0.0194 for the windmilling propeller. With speed fairings, as the POH quotes it.',
   },
   {
     id: 'c172-vy',
@@ -399,7 +414,7 @@ export const CASES: readonly ValidationCase[] = [
     model: () => c172Climb().vy.tas / KT,
     tolerance: { absolute: 0.5 },
     source: SOURCE.poh,
-    note: 'With the rate, sets the propeller: 3,035 N static thrust, falling to zero at 175.9 m/s.',
+    note: 'With the rate, sets the full-throttle propeller line: 3,313 N static thrust, falling to zero at 103.9 m/s.',
   },
   {
     id: 'c172-roc',
@@ -433,14 +448,15 @@ export const CASES: readonly ValidationCase[] = [
     group: 'c172',
     quantity: 'Service ceiling',
     condition: '100 ft/min, standard day',
-    role: 'check',
+    role: 'discrepancy',
     published: 14000,
     unit: 'ft',
     decimals: 0,
     model: () => c172Ceilings().service! / FT,
     tolerance: { absolute: 150 },
+    band: [14000, 14400],
     source: SOURCE.poh,
-    note: 'Never fitted: it tests the Gagg–Farrar power lapse and how the polar scales with density, all the way up.',
+    note: 'Never fitted. 1.5 % high since CD₀ was split into power on and power off (it was 0.4 % low on the glide polar). The headline is rounded: the POH’s own climb table, extrapolated on a standard day, reaches 100 ft/min near 14,300 ft. Pinned rather than the tolerance widened after the fact.',
   },
   {
     id: 'c172-vmax',
@@ -453,9 +469,9 @@ export const CASES: readonly ValidationCase[] = [
     decimals: 1,
     model: () => c172Climb().maxLevelSpeed! / KT,
     tolerance: { absolute: 2 },
-    band: [110, 120],
+    band: [115, 120],
     source: SOURCE.poh,
-    note: 'The polar was fitted to a glide flown with the propeller windmilling. That drag is real in the glide but absent in powered flight, so the model overstates drag at high speed. Pinned, not retuned: if a change moves it, that is worth noticing.',
+    note: 'Full throttle runs on the propeller line fitted to the climb at 74 KIAS. A straight line can’t follow a fixed-pitch propeller whose RPM, and so power, rise with airspeed, so it under-reads thrust at high speed. 9 % low on the old glide polar, 7 % now; the same 124 KTAS cruise at a set power is matched. Pinned, not retuned.',
   },
   {
     id: 'c172-stall-takeoff-flap',
@@ -521,7 +537,7 @@ export const CASES: readonly ValidationCase[] = [
     tolerance: { relative: 0.1 },
     band: [790, 880],
     source: POH_SPECIFICATIONS,
-    note: '13 % short, and the gap widens on hot days (see the table below). Probable causes: the propeller’s 3,035 N static thrust is the straight thrust line extended from a fit at climb speed, not a measurement, and the drag of the 10° flap isn’t modelled.',
+    note: '16 % short, and the gap widens on hot days (see the table below). Probable causes: the propeller’s 3,313 N static thrust is the straight thrust line extended from a fit at climb speed, not a measurement, and the drag of the 10° flap isn’t modelled. 13 % short on the old glide polar: the refitted line starts higher.',
   },
   {
     id: 'c172-takeoff-total',
@@ -536,7 +552,7 @@ export const CASES: readonly ValidationCase[] = [
     tolerance: { relative: 0.1 },
     band: [1310, 1460],
     source: POH_SPECIFICATIONS,
-    note: '15 % short: the ground roll’s shortfall, plus a climb to 50 ft that is steeper than the POH’s.',
+    note: '17 % short: the ground roll’s shortfall, plus a climb to 50 ft that is steeper than the POH’s.',
   },
   {
     id: 'c172-takeoff-density',

@@ -73,7 +73,7 @@ cross-check on every push, and deploys to GitHub Pages when they pass. See [ROAD
   dashed on the performance curves, with a side-by-side table of speeds, climb,
   ceilings, glide, takeoff, landing and range. It flies the same condition at the same
   fraction of its own max takeoff mass. In the link it is the same keys with a
-  `vs.` prefix: `?ac=c172&vs.ac=c172&vs.cd0=0.035` is a 172 against a cleaner one.
+  `vs.` prefix: `?ac=c172&vs.ac=c172&vs.cd0=0.028` is a 172 against a cleaner one.
 - **Sensitivity.** Each input (weight, wing area, aspect ratio, Oswald efficiency,
   CD₀, each CLmax, engine power, SFC, fuel) nudged 1 % either way on its own, and
   every result's change found by central difference. Each is reported as an
@@ -108,7 +108,7 @@ cross-check on every push, and deploys to GitHub Pages when they pass. See [ROAD
    power required. The gap between them is the rate of climb, and it closes at the
    absolute ceiling, where V_x and V_y meet.
 7. **Turbocharge it.** In the editor, give the engine a critical altitude of
-   12,000 ft: the service ceiling jumps from 14,000 ft to about 24,000.
+   12,000 ft: the service ceiling jumps from about 14,200 ft to about 23,000.
 8. **Find the corner.** On the envelope tab, click the turn chart at its peak: that is
    the corner speed, where the 172 turns fastest, at its 3.8 g limit. Slower, the
    wing stalls first; faster, the structure would break first. The same point sits
@@ -118,18 +118,19 @@ cross-check on every push, and deploys to GitHub Pages when they pass. See [ROAD
 10. **Fly the jet up its P_s map.** The dashed best-climb line leans to higher speeds
     as it climbs, and the faint energy-height lines show why a jet trades speed for
     height on the way up.
-11. **Clean up a 172.** Compare the stock 172 with one at CD₀ 0.035 and AR 9:
-    (L/D)max, glide ratio and Breguet range all rise by the same 34 %, because each
-    is proportional to (L/D)max, while the stall speed doesn't move.
+11. **Clean up a 172.** Compare the stock 172 with one at CD₀ 0.028 and AR 9:
+    (L/D)max and Breguet range rise by the same 18 %, because the range is flown
+    at (L/D)max. The glide ratio rises less, 15 %: power off, the windmilling
+    propeller's drag is still there. The stall speed doesn't move.
 12. **Ask what matters.** On the sensitivity tab, the 172's takeoff over 50 ft is
-    led by weight at +2.05: the ground roll goes nearly as W². Switch to best range:
+    led by weight at +2.06: the ground roll goes nearly as W². Switch to best range:
     SFC sits at exactly −1, because Breguet range goes as 1/SFC, and CD₀, aspect
     ratio and Oswald efficiency at ±0.50, because the range is flown at
     (L/D)max ∝ √(πeAR/CD₀). Wing area doesn't move it at all.
 
 ## Validation
 
-The **Validation** page (`validation.html`) lists 43 published figures from four
+The **Validation** page (`validation.html`) lists 44 published figures from four
 sources: the US Standard Atmosphere 1976 tables, NACA Report 1135, Anderson's worked
 examples, and the Cessna 172S POH. Each shows published value, model value,
 difference, tolerance and status, computed live in the browser. Below them are the
@@ -166,7 +167,7 @@ What the 172S comparison says, in brief:
 ```bash
 npm install
 npm run dev          # the explorer at http://localhost:5173, validation at /validation.html
-npm test             # 383 tests
+npm test             # 392 tests
 npm run validate     # cross-check against the independent Python reference (needs SciPy)
 npm run typecheck
 npm run build        # static site in dist/, relative paths, any host
@@ -180,12 +181,13 @@ npm run build        # static site in dist/, relative paths, any host
 | `src/physics/units.ts` | Branded unit types and conversions; SI internally, aviation units at the boundary |
 | `src/physics/atmosphere.ts` | Layered ISA to 84 852 m, entered by pressure altitude and ΔISA; density and true altitude, Sutherland viscosity |
 | `src/physics/airspeed.ts` | TAS / EAS / CAS / Mach; compressible impact pressure, Rayleigh pitot above Mach 1 |
-| `src/physics/aero.ts` | Parabolic drag polar, stall speed, and closed-form characteristic speeds |
+| `src/physics/aero.ts` | Parabolic drag polar, power on and power off (a windmilling propeller's drag), stall speed, and closed-form characteristic speeds |
 | `src/physics/performance/curves.ts` | Drag, thrust required, power required and L/D curves, with characteristic-speed markers at any load factor |
 | `src/physics/performance/turn.ts` | Level-turn load factor, radius and rate; lift-limited and sustained load factor, corner speed |
 | `src/physics/performance/vn.ts` | The V-n diagram: manoeuvre envelope by category, former 14 CFR 23.341 gust lines, design envelope |
 | `src/physics/performance/energy.ts` | Specific excess power at any load factor, and energy height |
 | `src/physics/performance/range.ts` | Breguet range and endurance, all four cases, and the payload–range diagram |
+| `src/physics/performance/cruise.ts` | Level flight at a set power or thrust: the POH's cruise |
 | `src/physics/performance/field.ts` | Takeoff and landing over 50 ft by Raymer's method, ground runs integrated exactly; runway friction for seven surfaces |
 | `src/physics/propulsion.ts` | Piston (Gagg–Farrar with the hot-day correction, turbocharged), turboprop and turbofan lapse; propeller thrust that is finite at zero speed |
 | `src/physics/performance/climb.ts` | Exact steady climb and the small-angle form; V_y, V_x, maximum level speed; absolute and service ceilings |
@@ -200,7 +202,7 @@ npm run build        # static site in dist/, relative paths, any host
 | `src/data/validation/` | The validation dataset, the POH tables, and the cross-check's last run |
 | `src/app/components/` | React controls, readouts, and the uPlot chart with its marker overlays |
 
-383 tests, covering the published ISA table at five altitudes, layer continuity,
+392 tests, covering the published ISA table at five altitudes, layer continuity,
 profile inversion, every closed-form optimum cross-checked against a brute-force
 scan, permalink round-trip stability, and the chart model's physics: the drag curve
 is identical against EAS at every altitude and slides right by `sqrt(ρ₀/ρ)` against
@@ -246,18 +248,23 @@ reaches the screen, so what you see is exactly what a pasted link opens. A malfo
 link degrades to defaults and says what it couldn't use.
 
 **Calibrated on some published numbers, checked on others.** Each fitted parameter of
-the Cessna 172S comes from exactly two POH figures:
+the Cessna 172S comes from one POH figure:
 - CLmax: the clean and full-flap stall speeds
-- CD₀ and Oswald e: best glide, 68 KIAS at 9:1
-- the propeller's thrust line: best rate of climb, 730 ft/min at 74 KIAS
+- Oswald e and CD₀ power off: best glide, 68 KIAS at 9:1, propeller windmilling
+- CD₀ power on: 124 KTAS at 75 % power and 8,500 ft
+- the propeller's full-throttle thrust line: best rate of climb, 730 ft/min at 74 KIAS
 
-Two figures the fit never saw then test it: V_x comes out at 60.9 kt against the
-published 62, and the service ceiling at 13,944 ft against 14,000.
+The two CD₀s, 0.052 and 0.0326, differ by the windmilling propeller: a fixed-pitch
+propeller at idle is a drag brake. One polar fitted to the glide, as earlier versions
+had, left powered flight 17 % slow at a set power. Figures the fit never saw then test
+it: V_x comes out at 60.0 kt against the published 62.
 
 **Known model limits are pinned, not hidden.** The 172S's maximum level speed comes
-out at 114.8 KTAS against the published 126, 9 % low. The polar was fitted to a glide
-flown with the propeller windmilling, and that drag doesn't exist in powered flight.
-A test pins the size of the error rather than retuning it away. The polar has no wave
+out at 117.4 KTAS against the published 126, 7 % low. Full throttle runs on a straight
+thrust line fitted to the climb, and a fixed-pitch propeller's RPM, and so its power,
+rise with airspeed in a way a straight line can't follow. The service ceiling, 14,215 ft
+against a rounded 14,000, is pinned the same way. Tests pin the size of each error
+rather than retuning it away. The polar has no wave
 drag either, so the charts shade everything above Mach 0.7, draw nothing past Mach
 0.9, and flag any climb speed or ceiling that depends on that regime as optimistic.
 
@@ -265,7 +272,7 @@ drag either, so the charts shade everything above Mach 0.7, draw nothing past Ma
 as 1/T on a hot day: twice the engine makers' 1/√T. The POH's climb table showed it,
 with the hot cells off by up to 66 %. Power is now Gagg–Farrar at the standard day's
 density for the pressure altitude, times √(T_std/T); the worst hot cell is now within
-5 %, and standard days didn't change.
+7 %, and standard days didn't change.
 
 **Field lengths are textbook, and say so.** Takeoff and landing use Raymer's speeds
 and segments with the ground runs integrated exactly, and nothing is fitted to the

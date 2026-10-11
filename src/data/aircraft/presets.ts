@@ -9,20 +9,24 @@ const KT = 1852 / 3600;
  * These are *simplified representative* figures, not certification data.
  *
  * The Cessna 172S is calibrated against its POH, and checked against figures
- * the calibration didn't use. Mass, wing area and span are published. Each
- * remaining parameter is fitted to exactly two published numbers:
+ * the calibration didn't use. Mass, wing area and span are published. The
+ * remaining parameters are fitted, one published figure each:
  *
  *   CLmax, flap CLmax   53 KCAS clean and 48 KCAS full-flap stall, at 2,550 lb
  *   takeoff CLmax       50 KCAS stall with 10° flap, the short-field setting
- *   CD0, Oswald e       best glide 68 KIAS at 9:1 (propeller windmilling)
+ *   e, CD0 power off    best glide 68 KIAS at 9:1 (propeller windmilling)
+ *   CD0 power on        cruise 124 KTAS at 75 % power and 8,500 ft, at the
+ *                       cruise propeller efficiency of 0.8
  *   propeller line      best rate of climb 730 ft/min at 74 KIAS, sea level
  *
- * Checks the calibration never saw (tests/references.test.ts):
- * - V_x 60.9 kt against the published 62 KIAS
- * - service ceiling 13,944 ft against the published 14,000 ft
- * - maximum level speed 114.8 KTAS against the published 126: 9 % low. The
- *   glide polar includes a windmilling propeller's drag, which overstates the
- *   drag of powered flight at high speed. The error is pinned, not tuned away.
+ * The two CD0s differ by the windmilling propeller, 0.0194: a fixed-pitch
+ * propeller at idle is a drag brake. One polar fitted to the glide made
+ * powered flight 17 % slow at a set power (vault finding 8).
+ *
+ * Checks and pinned discrepancies are on the /validation page: V_x 60.0 kt
+ * against 62 KIAS; maximum level speed 117.4 KTAS against 126, 7 % low,
+ * because the straight full-throttle thrust line can't follow a fixed-pitch
+ * propeller's RPM rising with speed. Pinned, not tuned away.
  *
  * The generic jet trainer and sailplane are plausible, not calibrated.
  *
@@ -41,8 +45,9 @@ export const CESSNA_172S: Aircraft = {
   mass: 2550 * 0.45359237, // 2,550 lb exactly, the 172S's max takeoff weight (2,450 lb is the 172R's)
   wingArea: 174 * 0.3048 * 0.3048, // 174 ft² exactly
   aspectRatio: 7.48, // 36 ft 1 in span over 174 ft²
-  oswaldEfficiency: 0.717, // fitted, with CD0, to the POH best glide: 68 KIAS at 9:1
-  cd0: 0.052,
+  oswaldEfficiency: 0.717, // fitted, with CD0 power off, to the POH best glide: 68 KIAS at 9:1
+  cd0: 0.0326, // fitted: 124 KTAS at 75 % power, 8,500 ft
+  windmillCd0: 0.0194, // power off, CD0 is 0.052: the glide's
   clMax: 1.54, // fitted: 53 KCAS clean stall at 2,550 lb
   clMaxFlaps: 1.88, // fitted: 48 KCAS full-flap stall at 2,550 lb
   clMaxTakeoff: 1.73, // fitted: 50 KCAS stall with 10° flap at 2,550 lb
@@ -50,7 +55,7 @@ export const CESSNA_172S: Aircraft = {
     kind: 'piston',
     power: 180 * 745.699872, // Lycoming IO-360-L2A, 180 hp at 2,700 rpm
     // Fitted, with the exact climb, to the POH best rate of climb: 730 ft/min at 74 KIAS, sea level
-    propeller: { staticThrust: 3035, zeroThrustSpeed: 175.9 },
+    propeller: { staticThrust: 3313, zeroThrustSpeed: 103.9 },
     sfc: 0.45 * BSFC_LB_PER_HP_H, // assumed: Anderson's CP-1 value, not from the POH
   },
   emptyMass: 1663 * 0.45359237, // POH standard empty weight

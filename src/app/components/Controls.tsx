@@ -91,7 +91,16 @@ function aircraftFields(system: UnitSystem): readonly (FieldDef & { readonly key
     },
     { key: 'aspectRatio', id: 'ar', label: 'Aspect ratio', hint: 'b²/S. Higher means less induced drag.', ...range('aspectRatio'), ...identity },
     { key: 'oswaldEfficiency', id: 'e', label: 'Oswald efficiency', hint: 'Span efficiency e.', ...range('oswaldEfficiency'), ...identity },
-    { key: 'cd0', id: 'cd0', label: 'CD₀', hint: 'Zero-lift drag coefficient.', ...range('cd0'), ...identity },
+    { key: 'cd0', id: 'cd0', label: 'CD₀', hint: 'Zero-lift drag coefficient, power on.', ...range('cd0'), ...identity },
+    {
+      key: 'windmillCd0',
+      id: 'cd0w',
+      label: 'CD₀ added power off',
+      hint: 'Drag of the windmilling propeller at idle, added to CD₀ in the glide and the landing. Leave blank for none.',
+      optional: true,
+      ...range('windmillCd0'),
+      ...identity,
+    },
     { key: 'clMax', id: 'clmax', label: 'CL max', hint: 'Clean maximum lift coefficient.', ...range('clMax'), ...identity },
     {
       key: 'clMaxFlaps',

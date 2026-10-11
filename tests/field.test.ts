@@ -142,7 +142,8 @@ describe('landing', () => {
     const c = PRESETS.c172;
     const w = weight(c.mass);
     const cl = groundLiftCoefficient(c, dry.rolling, c.clMaxFlaps!, 1.15);
-    const cd = c.cd0 + k(c) * cl * cl;
+    // Engine at idle: the windmilling propeller's drag is in the braking too.
+    const cd = c.cd0 + c.windmillCd0! + k(c) * cl * cl;
     const A = G * dry.braking;
     const B = (G / w) * 0.5 * sl.density * c.wingArea * (cd - dry.braking * cl);
     const v = r.touchdownSpeed;

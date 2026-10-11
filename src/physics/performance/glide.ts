@@ -13,10 +13,13 @@
  *
  * Into a headwind the best-glide speed rises: you lose less ground distance by
  * flying faster through the moving air.
+ *
+ * Power off means the windmilling propeller's drag too: every glide below is
+ * flown on the power-off polar (see powerOff in aero.ts).
  */
 
 import type { AtmosphereState } from '../atmosphere.js';
-import { clMinDrag, k, weight, type Aircraft } from '../aero.js';
+import { clMinDrag, k, powerOff, weight, type Aircraft } from '../aero.js';
 
 export interface GlidePoint {
   readonly cl: number;
@@ -31,7 +34,7 @@ export interface GlidePoint {
 
 /** The steady glide at one lift coefficient. */
 export function glideAtCl(aircraft: Aircraft, atmosphere: AtmosphereState, cl: number): GlidePoint {
-  const cd = aircraft.cd0 + k(aircraft) * cl * cl;
+  const cd = powerOff(aircraft).cd0 + k(aircraft) * cl * cl;
   const gamma = Math.atan(cd / cl);
   const tas = Math.sqrt((2 * weight(aircraft.mass) * Math.cos(gamma)) / (atmosphere.density * aircraft.wingArea * cl));
   return { cl, tas, gamma, glideRatio: cl / cd, sinkRate: tas * Math.sin(gamma) };
@@ -46,11 +49,12 @@ export function glideAtSpeed(aircraft: Aircraft, atmosphere: AtmosphereState, ta
   const w = weight(aircraft.mass);
   const q = 0.5 * atmosphere.density * tas * tas;
   const kFactor = k(aircraft);
+  const cd0 = powerOff(aircraft).cd0;
   let sin = 0;
   let cl = 0;
   for (let i = 0; i < 100; i++) {
     cl = (w * Math.sqrt(1 - sin * sin)) / (q * aircraft.wingArea);
-    const next = Math.min(1, (q * aircraft.wingArea * (aircraft.cd0 + kFactor * cl * cl)) / w);
+    const next = Math.min(1, (q * aircraft.wingArea * (cd0 + kFactor * cl * cl)) / w);
     const converged = Math.abs(next - sin) < 1e-14;
     sin = next;
     if (converged) break;
@@ -92,7 +96,7 @@ export interface Glide extends GlidePoint {
 
 /** Best glide: the flattest glide, at CL_md (or CLmax, if CL_md is beyond it). */
 export function bestGlide(aircraft: Aircraft, atmosphere: AtmosphereState): Glide {
-  const cl = clMinDrag(aircraft);
+  const cl = clMinDrag(powerOff(aircraft));
   const limitedByStall = cl > aircraft.clMax;
   return { ...glideAtCl(aircraft, atmosphere, limitedByStall ? aircraft.clMax : cl), limitedByStall };
 }

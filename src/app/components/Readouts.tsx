@@ -8,8 +8,8 @@ const SLUG_FT3_PER_KG_M3 = (0.3048 * 0.3048 * 0.3048) / 14.5939029372;
 
 const USE: Record<MarkerView['kind'], string> = {
   stall: 'Slowest level flight',
-  'min-power': 'Prop endurance · minimum sink',
-  'min-drag': 'Best glide · prop best range',
+  'min-power': 'Minimum power · prop endurance',
+  'min-drag': 'Max L/D · prop best range',
   'jet-range': 'Jet best range',
 };
 
