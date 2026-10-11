@@ -72,6 +72,10 @@ cross-check on every push, and deploys to GitHub Pages when they pass. See [ROAD
   power), so the integrals are evaluated numerically and the best speed found. A
   **payload–range diagram** shows the trade from full payload to ferry range. Fuel
   capacity, empty mass, SFC and base fuel flow are editable.
+- **Cruise at a set power,** the way a POH tabulates it: pick a percentage of rated
+  power and read the speed, fuel flow, and range and time on the fuel aboard with a
+  45-minute reserve. For the 172S it is checked against all 111 cells of the POH's
+  cruise table.
 - **Two aircraft, compared.** A second aircraft, editable like the first, overlaid
   dashed on the performance curves, with a side-by-side table of speeds, climb,
   ceilings, glide, takeoff, landing and range. It flies the same condition at the same
@@ -133,6 +137,10 @@ cross-check on every push, and deploys to GitHub Pages when they pass. See [ROAD
     −0.25, summing to −1 as scaling both must. CD₀ (−0.44) outweighs aspect ratio
     (+0.32), because the best cruise is faster than V_md, where parasite drag
     dominates.
+13. **Fly the POH's cruise.** On the range tab at 8,500 ft, set 75 %: 124 KTAS at
+    10.3 GPH, the POH's figures. Drop to 45 % and the speed falls to 93 KTAS but the
+    range grows, because fuel flow falls faster than speed. The validation page has
+    every cell of the POH's cruise table against the model.
 
 ## Validation
 
@@ -177,7 +185,7 @@ What the 172S comparison says, in brief:
 ```bash
 npm install
 npm run dev          # the explorer at http://localhost:5173, validation at /validation.html
-npm test             # 407 tests
+npm test             # 412 tests
 npm run validate     # cross-check against the independent Python reference (needs SciPy)
 npm run typecheck
 npm run build        # static site in dist/, relative paths, any host
@@ -212,7 +220,7 @@ npm run build        # static site in dist/, relative paths, any host
 | `src/data/validation/` | The validation dataset, the POH tables, and the cross-check's last run |
 | `src/app/components/` | React controls, readouts, and the uPlot chart with its marker overlays |
 
-407 tests, covering the published ISA table at five altitudes, layer continuity,
+412 tests, covering the published ISA table at five altitudes, layer continuity,
 profile inversion, every closed-form optimum cross-checked against a brute-force
 scan, permalink round-trip stability, and the chart model's physics: the drag curve
 is identical against EAS at every altitude and slides right by `sqrt(ρ₀/ρ)` against

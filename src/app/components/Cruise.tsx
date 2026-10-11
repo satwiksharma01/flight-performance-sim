@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
 import { CRUISE_PROPELLER_EFFICIENCY, tasToCas, type CruiseCase } from '../../physics/index.js';
 import type { CruiseModel } from '../cruise.js';
-import { SYSTEM_UNITS, type ViewSettings } from '../model.js';
+import { SYSTEM_UNITS, toMass, type ViewSettings } from '../model.js';
+import { toDistance } from '../cruise.js';
 import { mass, num, speed, tick } from '../format.js';
 import { Chart } from './Chart.js';
 
@@ -84,6 +85,8 @@ export function CruiseTab({ cruise, view, theme }: Props) {
           )}
         </section>
 
+        {cruise.setPower && <SetPowerCard cruise={cruise} view={view} />}
+
         <section className="card table-card" aria-labelledby="breguet-h">
           <h3 id="breguet-h">Which speed is best</h3>
           <p className="card-sub">
@@ -104,6 +107,68 @@ export function CruiseTab({ cruise, view, theme }: Props) {
         </section>
       </div>
     </>
+  );
+}
+
+/** Cruise at the sidebar's power setting, the way a POH tabulates it. */
+function SetPowerCard({ cruise, view }: { cruise: CruiseModel; view: ViewSettings }) {
+  const p = cruise.setPower!;
+  const { atmosphere } = cruise;
+  const pct = (f: number) => `${num(f * 100)} %`;
+  const unit = SYSTEM_UNITS[view.system].mass;
+  return (
+    <section className="card table-card" aria-labelledby="set-power-h">
+      <h3 id="set-power-h">Cruise at a set power</h3>
+      <p className="card-sub">
+        Level flight at {pct(p.setting)} of the engine’s rating, set in the sidebar, at this weight and altitude. On the
+        fuel aboard, keeping 45 minutes in reserve; no climb or descent.
+      </p>
+      <dl className="readout">
+        <Row label="Full throttle here" value={<>{pct(p.available)} of the rating</>} />
+        {p.setting > p.available + 0.005 && (
+          <Row label="Caution" value={<span className="caution">More than full throttle gives at this altitude and temperature.</span>} />
+        )}
+        {p.tas === null ? (
+          <Row label="Speed" value={<span className="caution">This setting can’t hold level flight here.</span>} />
+        ) : (
+          <Row
+            label="Speed"
+            value={
+              <>
+                <strong>{speed(tasToCas(p.tas, atmosphere.pressure, atmosphere.speedOfSound), view.unit)} CAS</strong>{' '}
+                <span className="dim">{speed(p.tas, view.unit)} TAS</span>
+              </>
+            }
+          />
+        )}
+        {p.fuelFlow !== null && (
+          <Row
+            label="Fuel flow"
+            value={
+              <>
+                {num(toMass(p.fuelFlow * 3600, view.system), 1)} {unit}/h
+                {cruise.result?.kind === 'propeller' && (
+                  <span className="dim"> {num((p.fuelFlow * 3600) / (6 * 0.45359237), 1)} GPH of avgas</span>
+                )}
+              </>
+            }
+          />
+        )}
+        {p.range !== null && p.endurance !== null && (
+          <Row
+            label="Range"
+            value={
+              <>
+                <strong>
+                  {num(toDistance(p.range, view))} {distanceUnit(view)}
+                </strong>{' '}
+                <span className="dim">in {num(p.endurance / 3600, 1)} h</span>
+              </>
+            }
+          />
+        )}
+      </dl>
+    </section>
   );
 }
 

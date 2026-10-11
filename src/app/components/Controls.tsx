@@ -624,6 +624,24 @@ function Slider({
 export const ALTITUDE_MAX_FT = 45_000;
 
 /** The runway: surface and wind, for the takeoff and landing tab. */
+export function CruisePanel({ setting, onSetting }: { setting: number; onSetting: (fraction: number) => void }) {
+  const id = useId();
+  return (
+    <section className="panel-section" aria-labelledby={`${id}-h`}>
+      <h2 id={`${id}-h`}>Cruise</h2>
+      <Slider
+        label="Power setting"
+        value={setting * 100}
+        min={20}
+        max={100}
+        step={1}
+        readout={`${num(setting * 100)} % of rated`}
+        onChange={(v) => onSetting(v / 100)}
+      />
+    </section>
+  );
+}
+
 export function RunwayPanel({
   surface,
   headwind,

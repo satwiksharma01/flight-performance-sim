@@ -324,6 +324,14 @@ describe('structural limits, takeoff flap and runway', () => {
     expect(decodeScenario('ac=c172&sfc=1').problems).toHaveLength(1); // out of range
   });
 
+  it('keeps a cruise setting other than 75 %, and drops 75 %', () => {
+    expect(encodeScenario({ ...DEFAULT_SCENARIO, cruisePower: 0.55 })).toBe('ac=c172&cp=0.55');
+    expect(decodeScenario('ac=c172&cp=0.55').scenario.cruisePower).toBe(0.55);
+    expect(encodeScenario({ ...DEFAULT_SCENARIO, cruisePower: 0.75 })).toBe('ac=c172');
+    expect(decodeScenario('ac=c172&cp=0.75').scenario.cruisePower).toBeUndefined();
+    expect(decodeScenario('cp=1.5').problems).toHaveLength(1);
+  });
+
   it('keeps the runway surface and wind, and drops the defaults', () => {
     const scenario: Scenario = { ...DEFAULT_SCENARIO, surface: 'soft-turf', headwind: -2.5 };
     expect(encodeScenario(scenario)).toBe('ac=c172&rw=soft-turf&hw=-2.5');

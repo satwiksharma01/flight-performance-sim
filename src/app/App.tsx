@@ -10,7 +10,7 @@ import {
   type SurfaceId,
 } from '../physics/index.js';
 import { PRESETS, type PresetId } from '../data/aircraft/presets.js';
-import { headwindOf, surfaceOf } from '../state/url.js';
+import { DEFAULT_CRUISE_POWER, cruisePowerOf, headwindOf, surfaceOf } from '../state/url.js';
 import {
   SYSTEM_UNITS,
   axisToTas,
@@ -28,7 +28,7 @@ import { buildCruiseModel } from './cruise.js';
 import { canonicalize, readPermalink, writePermalink, type Permalink } from './permalink.js';
 import { axisLabel, axisTick, num, tick } from './format.js';
 import { Chart, type ChartBand, type ChartMarker } from './components/Chart.js';
-import { AddComparison, AircraftPanel, ConditionPanel, RunwayPanel, ViewPanel, type AircraftKey } from './components/Controls.js';
+import { AddComparison, AircraftPanel, ConditionPanel, CruisePanel, RunwayPanel, ViewPanel, type AircraftKey } from './components/Controls.js';
 import { ComparisonTable } from './components/Compare.js';
 import { buildComparison, unionWindow } from './compare.js';
 import { AtmospherePanel, ClimbPanel, GlidePanel, SelectedPanel, SpeedsTable, Tiles } from './components/Readouts.js';
@@ -196,6 +196,11 @@ export function App() {
       return { ...s, scenario: surface === 'dry-paved' ? rest : { ...rest, surface } };
     });
 
+  const setCruisePower = (fraction: number) =>
+    update((s) => {
+      const { cruisePower: _previous, ...rest } = s.scenario;
+      return { ...s, scenario: Math.abs(fraction - DEFAULT_CRUISE_POWER) < 1e-9 ? rest : { ...rest, cruisePower: fraction } };
+    });
   const setHeadwind = (headwind: number) =>
     update((s) => {
       const { headwind: _previous, ...rest } = s.scenario;
@@ -387,6 +392,9 @@ export function App() {
               onMass={setOperatingMass}
               onBank={setBank}
             />
+          )}
+          {view.tab === 'range' && scenario.aircraft.propulsion && (
+            <CruisePanel setting={cruisePowerOf(scenario)} onSetting={setCruisePower} />
           )}
           {view.tab === 'field' && (
             <RunwayPanel

@@ -373,8 +373,13 @@ curve move. A complete product at a tiny scope.
       source. An optimum slower than 1.2 V_s is held there (the 172's V_mp is
       below its stall)*
 - [x] Payload–range diagram — *no zero-fuel-mass limit: max payload is the useful load*
-- [ ] Cruise at set power, checked against the 172S POH cruise and range tables
-      *(deferred from the Breguet item: needs a part-power fuel-flow model)*
+- [x] Cruise at set power, checked against the 172S POH cruise and range tables —
+      *it exposed a core error: the 172's one polar was fitted to the power-off
+      glide, windmilling propeller and all, so powered flight ran 17 % slow. CD₀ is
+      now split power on / power off (0.0326 + 0.0194), and fuel flow is a straight
+      line in power fitted to two POH cells, which Breguet now integrates. All 111
+      cruise cells: speed within 3 % in 105 (mean −0.7 %), fuel flow within 2 %;
+      range and time aloft at 75 % and 45 % within 2.6 %*
 - [x] Two-aircraft overlay comparison — *second aircraft fully editable (`vs.` keys),
       same condition at the same MTOW fraction, overlaid on the curves tab with a
       side-by-side table*

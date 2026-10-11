@@ -6,7 +6,13 @@
 import { COMPRESSIBILITY_ONSET, chartWindow, keyedCache, niceCeiling, toMass, type ViewSettings } from './model.js';
 import { atPressureAltitude, type AtmosphereState } from '../physics/atmosphere.js';
 import { breguet, fuelAboard, payloadRange, type RangeEndurance } from '../physics/performance/range.js';
-import { operatingMass, type Scenario } from '../state/url.js';
+import { cruiseSpeed } from '../physics/performance/cruise.js';
+import { isPowered } from '../physics/performance/climb.js';
+import { fuelFlow, lapseRatio } from '../physics/propulsion.js';
+import { cruisePowerOf, operatingMass, type Scenario } from '../state/url.js';
+
+/** The reserve a set-power cruise keeps, as the POH counts it [s]. */
+export const CRUISE_RESERVE = 45 * 60;
 
 const FT = 0.3048;
 
@@ -26,6 +32,20 @@ export interface CruiseModel {
   readonly beyondModel: boolean;
   /** The engine's fuel flow has a base flow, so SFC rises at part power */
   readonly fuelLine: boolean;
+  /** Level cruise at the scenario's power setting; null without an engine */
+  readonly setPower: {
+    /** Fraction of the engine's sea-level rating [-] */
+    readonly setting: number;
+    /** What full throttle gives here, the same way [-] */
+    readonly available: number;
+    /** True airspeed [m/s], or null if the setting can't hold level flight */
+    readonly tas: number | null;
+    /** Fuel flow [kg/s], or null without an SFC */
+    readonly fuelFlow: number | null;
+    /** On the fuel aboard, keeping the reserve: time [s] and distance [m], or null if there's nothing to fly */
+    readonly endurance: number | null;
+    readonly range: number | null;
+  } | null;
   /** Payload against range, in the view's distance and mass units */
   readonly chart: {
     readonly range: readonly number[];
@@ -89,6 +109,26 @@ export function buildCruiseModel(scenario: Scenario, view: ViewSettings): Cruise
     reason,
     beyondModel: result !== null && result.range.tasStart > COMPRESSIBILITY_ONSET * atmosphere.speedOfSound,
     fuelLine: Boolean(aircraft.propulsion?.baseFuelFlow),
+    setPower: setPowerCruise(scenario, atmosphere, fuel),
     chart,
+  };
+}
+
+/** Level flight at the scenario's set power, and how long and far it goes on the fuel aboard. */
+function setPowerCruise(scenario: Scenario, atmosphere: AtmosphereState, fuel: number): CruiseModel['setPower'] {
+  const aircraft = { ...scenario.aircraft, mass: operatingMass(scenario) };
+  if (!isPowered(aircraft)) return null;
+  const engine = aircraft.propulsion;
+  const setting = cruisePowerOf(scenario);
+  const tas = cruiseSpeed(aircraft, atmosphere, setting);
+  const flow = engine.sfc ? fuelFlow(engine, setting * (engine.kind === 'turbofan' ? engine.thrust : engine.power)) : null;
+  const endurance = flow && tas !== null && fuel / flow > CRUISE_RESERVE ? fuel / flow - CRUISE_RESERVE : null;
+  return {
+    setting,
+    available: lapseRatio(engine, atmosphere),
+    tas,
+    fuelFlow: flow,
+    endurance,
+    range: endurance === null || tas === null ? null : endurance * tas,
   };
 }

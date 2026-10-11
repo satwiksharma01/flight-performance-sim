@@ -37,3 +37,32 @@ describe('range tab', () => {
     expect(m.chart!.selected.range).toBeLessThanOrEqual(m.chart!.xMax);
   });
 });
+
+describe('cruise at a set power', () => {
+  const at8500: Scenario = { ...DEFAULT_SCENARIO, altitude: 8500 * 0.3048 };
+  const GPH = (6 * 0.45359237) / 3600;
+
+  it('flies the 172 at the POH’s 124 KTAS at 75 %, burning the fuel line’s 10.3 GPH', () => {
+    const p = buildCruiseModel(at8500, view).setPower!;
+    expect(p.setting).toBe(0.75);
+    expect(p.tas! / (1852 / 3600)).toBeCloseTo(124, 0);
+    expect(p.fuelFlow! / GPH).toBeCloseTo(1.4 + (3.9 / 33) * 75, 9);
+  });
+
+  it('keeps 45 minutes of the fuel aboard in reserve, and flies the rest at that speed', () => {
+    const m = buildCruiseModel(at8500, view);
+    const p = m.setPower!;
+    expect(p.endurance).toBeCloseTo(m.fuel / p.fuelFlow! - 45 * 60, 6);
+    expect(p.range).toBeCloseTo(p.endurance! * p.tas!, 6);
+  });
+
+  it('says when the setting is more than full throttle gives', () => {
+    const p = buildCruiseModel({ ...at8500, cruisePower: 0.9 }, view).setPower!;
+    expect(p.available).toBeLessThan(0.8);
+    expect(p.setting).toBeGreaterThan(p.available);
+  });
+
+  it('has nothing to set for a glider', () => {
+    expect(buildCruiseModel({ ...DEFAULT_SCENARIO, presetId: 'sailplane', aircraft: PRESETS.sailplane, tas: 25 }, view).setPower).toBeNull();
+  });
+});

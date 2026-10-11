@@ -57,6 +57,16 @@ export interface Scenario {
   readonly surface?: SurfaceId;
   /** Headwind component on the runway [m/s], negative for a tailwind. Absent means calm. */
   readonly headwind?: number;
+  /** Cruise setting, a fraction of the engine's sea-level rating, for the range tab. Absent means 75 %. */
+  readonly cruisePower?: number;
+}
+
+/** The POH's maximum recommended cruise power, 75 %. */
+export const DEFAULT_CRUISE_POWER = 0.75;
+
+/** The scenario's cruise setting [-]. */
+export function cruisePowerOf(scenario: Scenario): number {
+  return scenario.cruisePower ?? DEFAULT_CRUISE_POWER;
 }
 
 /** What the aircraft weighs in this scenario [kg]. */
@@ -133,6 +143,8 @@ const KEY = {
   // The runway.
   surface: 'rw',
   headwind: 'hw',
+  // Cruise at a set power, on the range tab.
+  cruisePower: 'cp',
 } as const;
 
 /** Structural limits by their query-string key. */
@@ -150,6 +162,7 @@ const LIMITS = {
   tas: { min: 1, max: 1000 },
   loadFactor: { min: 1, max: 10 },
   headwind: { min: -20, max: 40 },
+  cruisePower: { min: 0.2, max: 1 },
 } as const;
 
 /**
@@ -315,6 +328,9 @@ export function encodeScenario(scenario: Scenario): string {
     params.set(KEY.loadFactor, formatNumber(scenario.loadFactor));
   }
   if (scenario.surface !== undefined && scenario.surface !== 'dry-paved') params.set(KEY.surface, scenario.surface);
+  if (scenario.cruisePower !== undefined && !sameNumber(scenario.cruisePower, DEFAULT_CRUISE_POWER)) {
+    params.set(KEY.cruisePower, formatNumber(scenario.cruisePower));
+  }
   if (scenario.headwind !== undefined && !sameNumber(scenario.headwind, 0)) {
     params.set(KEY.headwind, formatNumber(scenario.headwind));
   }
@@ -606,6 +622,7 @@ export function decodeScenario(query: string): DecodeResult {
   });
   const loadFactor = readNumber(params, KEY.loadFactor, 'Load factor', problems, LIMITS.loadFactor);
   const headwind = readNumber(params, KEY.headwind, 'Headwind', problems, LIMITS.headwind);
+  const cruisePower = readNumber(params, KEY.cruisePower, 'Cruise power', problems, LIMITS.cruisePower);
   let surface: SurfaceId | undefined;
   const rawSurface = params.get(KEY.surface);
   if (rawSurface !== null) {
@@ -630,6 +647,7 @@ export function decodeScenario(query: string): DecodeResult {
       ...(loadFactor !== undefined && !sameNumber(loadFactor, 1) ? { loadFactor } : {}),
       ...(surface !== undefined && surface !== 'dry-paved' ? { surface } : {}),
       ...(headwind !== undefined && !sameNumber(headwind, 0) ? { headwind } : {}),
+      ...(cruisePower !== undefined && !sameNumber(cruisePower, DEFAULT_CRUISE_POWER) ? { cruisePower } : {}),
     },
     problems,
   };
