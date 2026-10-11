@@ -87,7 +87,7 @@ export function climbAt(
 const GOLDEN = (Math.sqrt(5) - 1) / 2;
 
 /** Golden-section search for the maximum of a unimodal function on [a, b]. */
-function maximise(f: (x: number) => number, a: number, b: number): number {
+export function maximise(f: (x: number) => number, a: number, b: number): number {
   let x1 = b - GOLDEN * (b - a);
   let x2 = a + GOLDEN * (b - a);
   let f1 = f(x1);

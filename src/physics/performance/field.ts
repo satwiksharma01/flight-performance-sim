@@ -91,7 +91,7 @@ export function groundLiftCoefficient(aircraft: Aircraft, rolling: number, clMax
 }
 
 /** Simpson's rule on [a, b] with n panels (even). */
-function simpson(f: (x: number) => number, a: number, b: number, n = 512): number {
+export function simpson(f: (x: number) => number, a: number, b: number, n = 512): number {
   const h = (b - a) / n;
   let sum = f(a) + f(b);
   for (let i = 1; i < n; i++) sum += (i % 2 === 1 ? 4 : 2) * f(a + i * h);

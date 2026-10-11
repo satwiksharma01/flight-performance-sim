@@ -397,10 +397,12 @@ def cruise_speed(ac, rho, setting):
 
 
 def cruise_reference(ac, rho, fuel, cl_range, cl_endurance):
-    """Integrate dR = V dW / flow and dt = dW / flow, at constant CL, over the fuel burned."""
+    """Integrate dR = V dW / flow and dt = dW / flow, at constant CL, over the fuel burned.
+
+    Fuel flow is the engine's straight line in output: base + sfc x (D V / 0.8, or D for a jet).
+    Returns the integrals at the given CLs, and each maximised over CL up to the 1.2 V_s cap."""
     eng = ac["propulsion"]
     jet = eng["kind"] == "turbofan"
-    c = eng["sfc"] * G0
     W0 = ac["mass"] * G0
     W1 = (ac["mass"] - fuel) * G0
     cd0, k = polar(ac)
@@ -408,12 +410,16 @@ def cruise_reference(ac, rho, fuel, cl_range, cl_endurance):
     def rates(W, cl):
         V = math.sqrt(2 * W / (rho * ac["wingArea"] * cl))
         D = W * (cd0 + k * cl * cl) / cl
-        flow = c * D if jet else c * D * V / 0.8  # fuel weight per second
-        return V, flow
+        output = D if jet else D * V / 0.8
+        return V, G0 * (eng.get("baseFuelFlow", 0.0) + eng["sfc"] * output)  # fuel weight per second
 
-    rng = quad(lambda W: rates(W, cl_range)[0] / rates(W, cl_range)[1], W1, W0, epsabs=0, epsrel=1e-13)[0]
-    end = quad(lambda W: 1 / rates(W, cl_endurance)[1], W1, W0, epsabs=0, epsrel=1e-13)[0]
-    return rng, end
+    rng = lambda cl: quad(lambda W: rates(W, cl)[0] / rates(W, cl)[1], W1, W0, epsabs=0, epsrel=1e-13)[0]
+    end = lambda cl: quad(lambda W: 1 / rates(W, cl)[1], W1, W0, epsabs=0, epsrel=1e-13)[0]
+    cap = ac["clMax"] / 1.2 ** 2
+    # The bounded minimiser stays sqrt(eps) clear of the bounds, so the cap itself is checked too.
+    best = lambda f: max(f(cap), -minimize_scalar(lambda cl: -f(cl), bounds=(1e-3 * cap, cap), method="bounded",
+                                                  options=dict(xatol=1e-12)).fun)
+    return rng(cl_range), end(cl_endurance), best(rng), best(end)
 
 
 # Relative tolerances, except altitudes (absolute, metres). Each is set by the
@@ -437,7 +443,8 @@ TOLERANCE = {
     "turn load factor": 1e-11,    # brentq roots
     "specific excess power": 1e-12,
     "takeoff distances": 1e-7, "landing distances": 1e-7,  # Simpson in speed vs DOP853 in time
-    "Breguet range": 1e-10, "Breguet endurance": 1e-10,    # closed form vs quadrature
+    "Breguet range": 1e-10, "Breguet endurance": 1e-10,    # Simpson vs adaptive quadrature, at the TS's CL
+    "best cruise CL": 1e-9,       # each maximised independently; the optimum is flat
     "cruise speed": 1e-9,         # bisection vs brentq
 }
 
@@ -583,10 +590,12 @@ def main(path):
 
     for row in ts["cruise"]:
         r = row["result"]
-        rng, end = cruise_reference(row["ac"], row["rho"], row["fuel"], r["range"]["cl"], r["endurance"]["cl"])
+        rng, end, best_rng, best_end = cruise_reference(row["ac"], row["rho"], row["fuel"], r["range"]["cl"], r["endurance"]["cl"])
         where = f"{row['id']} at {row['h']} m"
         track("Breguet range", r["range"]["value"], rng, where)
         track("Breguet endurance", r["endurance"]["value"], end, where)
+        track("best cruise CL", r["range"]["value"], best_rng, f"{where}, range")
+        track("best cruise CL", r["endurance"]["value"], best_end, f"{where}, endurance")
 
     for row in ts["setPower"]:
         ref = cruise_speed(row["ac"], row["rho"], row["setting"])

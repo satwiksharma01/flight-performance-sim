@@ -43,8 +43,9 @@ export const CROSS_CHECK = {
     { quantity: "specific excess power", worst: 9.880984919163893e-15, limit: 1e-12, where: "jet-trainer at Hp 3000 m, dISA 15, V 120, n 2.5", pass: true },
     { quantity: "takeoff distances", worst: 1.2521174571029534e-11, limit: 1e-07, where: "c172 at Hp 1500 m, dISA 20, wind 0, mu 0.07, groundRoll", pass: true },
     { quantity: "landing distances", worst: 7.930942320681863e-08, limit: 1e-07, where: "sailplane at Hp 1500 m, dISA 20, wind 0, mu 0.04, groundRoll", pass: true },
-    { quantity: "Breguet range", worst: 8.76416067469711e-16, limit: 1e-10, where: "jet-trainer at 3000 m", pass: true },
-    { quantity: "Breguet endurance", worst: 4.101834076796954e-16, limit: 1e-10, where: "c172 at 3000 m", pass: true },
+    { quantity: "Breguet range", worst: 5.5689346425440165e-12, limit: 1e-10, where: "jet-trainer at 0 m", pass: true },
+    { quantity: "Breguet endurance", worst: 2.0533953890453738e-11, limit: 1e-10, where: "jet-trainer at 0 m", pass: true },
+    { quantity: "best cruise CL", worst: 2.0533953890453738e-11, limit: 1e-09, where: "jet-trainer at 0 m, endurance", pass: true },
     { quantity: "cruise speed", worst: 3.990142047251688e-11, limit: 1e-09, where: "c172 at 0 m, setting 0.85", pass: true },
   ],
 } as const;

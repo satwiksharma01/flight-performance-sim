@@ -215,6 +215,23 @@ function engineFields(
     value: engine.sfc,
     set: (v: number | null) => ({ ...engine, sfc: v ?? engine.sfc }) as Propulsion,
   };
+  const { baseFuelFlow: _base, ...noBase } = engine;
+  const flowUnit = us ? 0.45359237 / 3600 : 1 / 3600; // lb/h or kg/h
+  const baseField = {
+    def: {
+      id: 'ff0',
+      label: 'Base fuel flow',
+      unit: us ? 'lb/h' : 'kg/h',
+      hint: 'Fuel flow at zero output, extrapolated: with the SFC as its slope, fuel flow is a straight line in power, so consumption per unit of output rises at low power. Blank: constant SFC.',
+      optional: true,
+      min: L.baseFuelFlow.min,
+      max: L.baseFuelFlow.max,
+      toDisplay: (v: number) => v / flowUnit,
+      fromDisplay: (v: number) => v * flowUnit,
+    },
+    value: engine.baseFuelFlow,
+    set: (v: number | null) => (v === null ? noBase : { ...engine, baseFuelFlow: v }) as Propulsion,
+  };
 
   if (engine.kind === 'turbofan') {
     return [
@@ -225,6 +242,7 @@ function engineFields(
       },
       lapse(engine.lapseExponent, (v) => ({ ...engine, lapseExponent: v })),
       sfcField,
+      baseField,
     ];
   }
 
@@ -264,7 +282,7 @@ function engineFields(
   };
 
   if (engine.kind === 'turboprop') {
-    return [powerField, lapse(engine.lapseExponent, (v) => ({ ...engine, lapseExponent: v })), ...propFields, sfcField];
+    return [powerField, lapse(engine.lapseExponent, (v) => ({ ...engine, lapseExponent: v })), ...propFields, sfcField, baseField];
   }
   const { criticalAltitude: _critical, ...aspirated } = engine;
   return [
@@ -286,6 +304,7 @@ function engineFields(
     },
     ...propFields,
     sfcField,
+    baseField,
   ];
 }
 

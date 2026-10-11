@@ -65,17 +65,21 @@ cross-check on every push, and deploys to GitHub Pages when they pass. See [ROAD
   on the current ISA day, each split into its phases, on seven runway surfaces with a
   head- or tailwind. For the stock 172S the POH's own tables are drawn over the
   curves.
-- **Range and endurance** by the Breguet equations, in all four cases: a propeller
-  flies best range at `V_md` and best endurance at `V_mp`, a jet at `V_jr` and
-  `V_md`. A **payload–range diagram** shows the trade from full payload to ferry
-  range. Fuel capacity, empty mass and SFC are editable.
+- **Range and endurance** by Breguet's constant-CL cruise. With constant SFC that is
+  the four textbook cases: a propeller flies best range at `V_md` and best
+  endurance at `V_mp`, a jet at `V_jr` and `V_md`. Real fuel flow is a straight line
+  in power with a base flow (the 172S's is fitted to its POH, and SFC rises at part
+  power), so the integrals are evaluated numerically and the best speed found. A
+  **payload–range diagram** shows the trade from full payload to ferry range. Fuel
+  capacity, empty mass, SFC and base fuel flow are editable.
 - **Two aircraft, compared.** A second aircraft, editable like the first, overlaid
   dashed on the performance curves, with a side-by-side table of speeds, climb,
   ceilings, glide, takeoff, landing and range. It flies the same condition at the same
   fraction of its own max takeoff mass. In the link it is the same keys with a
   `vs.` prefix: `?ac=c172&vs.ac=c172&vs.cd0=0.028` is a 172 against a cleaner one.
 - **Sensitivity.** Each input (weight, wing area, aspect ratio, Oswald efficiency,
-  CD₀, each CLmax, engine power, SFC, fuel) nudged 1 % either way on its own, and
+  CD₀ and its power-off increment, each CLmax, engine power, SFC and base fuel flow,
+  fuel) nudged 1 % either way on its own, and
   every result's change found by central difference. Each is reported as an
   elasticity, the per cent change for 1 % more of the input, ranked as bars with a
   sentence naming the strongest. Where a closed form exists, the bars reproduce its
@@ -119,14 +123,16 @@ cross-check on every push, and deploys to GitHub Pages when they pass. See [ROAD
     as it climbs, and the faint energy-height lines show why a jet trades speed for
     height on the way up.
 11. **Clean up a 172.** Compare the stock 172 with one at CD₀ 0.028 and AR 9:
-    (L/D)max and Breguet range rise by the same 18 %, because the range is flown
-    at (L/D)max. The glide ratio rises less, 15 %: power off, the windmilling
-    propeller's drag is still there. The stall speed doesn't move.
+    (L/D)max rises 18 %, the glide ratio only 15 % (power off, the windmilling
+    propeller's drag is still there), and the range 13 %: the engine's base fuel
+    flow makes the best cruise faster than V_md, where the induced drag that aspect
+    ratio cuts matters less. The stall speed doesn't move.
 12. **Ask what matters.** On the sensitivity tab, the 172's takeoff over 50 ft is
     led by weight at +2.06: the ground roll goes nearly as W². Switch to best range:
-    SFC sits at exactly −1, because Breguet range goes as 1/SFC, and CD₀, aspect
-    ratio and Oswald efficiency at ±0.50, because the range is flown at
-    (L/D)max ∝ √(πeAR/CD₀). Wing area doesn't move it at all.
+    the fuel line's slope and base flow share the fuel flow between them, −0.75 and
+    −0.25, summing to −1 as scaling both must. CD₀ (−0.44) outweighs aspect ratio
+    (+0.32), because the best cruise is faster than V_md, where parasite drag
+    dominates.
 
 ## Validation
 
@@ -167,7 +173,7 @@ What the 172S comparison says, in brief:
 ```bash
 npm install
 npm run dev          # the explorer at http://localhost:5173, validation at /validation.html
-npm test             # 392 tests
+npm test             # 399 tests
 npm run validate     # cross-check against the independent Python reference (needs SciPy)
 npm run typecheck
 npm run build        # static site in dist/, relative paths, any host
@@ -186,10 +192,10 @@ npm run build        # static site in dist/, relative paths, any host
 | `src/physics/performance/turn.ts` | Level-turn load factor, radius and rate; lift-limited and sustained load factor, corner speed |
 | `src/physics/performance/vn.ts` | The V-n diagram: manoeuvre envelope by category, former 14 CFR 23.341 gust lines, design envelope |
 | `src/physics/performance/energy.ts` | Specific excess power at any load factor, and energy height |
-| `src/physics/performance/range.ts` | Breguet range and endurance, all four cases, and the payload–range diagram |
+| `src/physics/performance/range.ts` | Breguet's constant-CL cruise integrated with the engine's fuel-flow line, at the best CL; the payload–range diagram |
 | `src/physics/performance/cruise.ts` | Level flight at a set power or thrust: the POH's cruise |
 | `src/physics/performance/field.ts` | Takeoff and landing over 50 ft by Raymer's method, ground runs integrated exactly; runway friction for seven surfaces |
-| `src/physics/propulsion.ts` | Piston (Gagg–Farrar with the hot-day correction, turbocharged), turboprop and turbofan lapse; propeller thrust that is finite at zero speed |
+| `src/physics/propulsion.ts` | Piston (Gagg–Farrar with the hot-day correction, turbocharged), turboprop and turbofan lapse; propeller thrust that is finite at zero speed; fuel flow a straight line in output |
 | `src/physics/performance/climb.ts` | Exact steady climb and the small-angle form; V_y, V_x, maximum level speed; absolute and service ceilings |
 | `src/physics/performance/glide.ts` | Glide from the polar: best glide, minimum sink, best glide in wind, the sink polar |
 | `src/data/aircraft/presets.ts` | Id-keyed preset registry — ids are part of the URL format, so treat them as append-only |
@@ -202,7 +208,7 @@ npm run build        # static site in dist/, relative paths, any host
 | `src/data/validation/` | The validation dataset, the POH tables, and the cross-check's last run |
 | `src/app/components/` | React controls, readouts, and the uPlot chart with its marker overlays |
 
-392 tests, covering the published ISA table at five altitudes, layer continuity,
+399 tests, covering the published ISA table at five altitudes, layer continuity,
 profile inversion, every closed-form optimum cross-checked against a brute-force
 scan, permalink round-trip stability, and the chart model's physics: the drag curve
 is identical against EAS at every altitude and slides right by `sqrt(ρ₀/ρ)` against

@@ -64,11 +64,12 @@ describe('elasticities against the closed forms', () => {
     expect(e['clean CLmax']).toBeCloseTo(-0.5 + share * ((2 * induced) / cd - 1), close);
   });
 
-  it('Breguet range goes as 1 / SFC, and as ln(W0 / W1) in weight and fuel', () => {
+  it('Breguet range goes as 1 / SFC, and as ln(W0 / W1) in weight and fuel, at constant SFC', () => {
     // The 172 at MTOW has full tanks with payload to spare, so 1 % more weight
     // is payload and the fuel is fixed: E_W = -Wf / (W1 ln(W0/W1)), E_fuel the opposite.
-    const e = of(DEFAULT_SCENARIO, 'range');
-    const aircraft = PRESETS.c172;
+    const { baseFuelFlow: _base, ...engine } = PRESETS.c172.propulsion!;
+    const aircraft = { ...PRESETS.c172, propulsion: engine };
+    const e = of({ ...DEFAULT_SCENARIO, presetId: null, aircraft }, 'range');
     const fuel = fuelAboard(aircraft);
     expect(fuel).toBe(aircraft.fuelCapacity);
     const w0 = weight(aircraft.mass);
@@ -81,6 +82,13 @@ describe('elasticities against the closed forms', () => {
     expect(breguet(aircraft, atPressureAltitude(0).density, fuel)?.range.stallLimited).toBe(false);
     expect(e['aspect ratio']).toBeCloseTo(0.5, close);
     expect(e['wing area']).toBeCloseTo(0, close);
+  });
+
+  it('shares the 1 / SFC between a fuel-flow line’s slope and its base flow', () => {
+    // Scaling both scales the fuel flow, so their elasticities sum to -1 (Euler's theorem).
+    const e = of(DEFAULT_SCENARIO, 'range');
+    expect(e['specific fuel consumption']! + e['base fuel flow']!).toBeCloseTo(-1, close);
+    expect(e['base fuel flow']).toBeLessThan(0);
   });
 
   it('a jet range goes as 1 / TSFC too', () => {

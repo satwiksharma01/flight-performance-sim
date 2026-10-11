@@ -127,6 +127,8 @@ function inputsOf(scenario: Scenario): Input[] {
         at: (f) => withAircraft({ propulsion: { ...engine, sfc: sfc * f } }),
       });
     }
+    const base = engine.baseFuelFlow;
+    if (base) inputs.push({ label: 'base fuel flow', at: (f) => withAircraft({ propulsion: { ...engine, baseFuelFlow: base * f } }) });
   }
   return inputs;
 }

@@ -24,6 +24,8 @@ export interface CruiseModel {
   readonly reason: string | null;
   /** The best-range speed is past Mach 0.7, where the polar no longer holds */
   readonly beyondModel: boolean;
+  /** The engine's fuel flow has a base flow, so SFC rises at part power */
+  readonly fuelLine: boolean;
   /** Payload against range, in the view's distance and mass units */
   readonly chart: {
     readonly range: readonly number[];
@@ -86,6 +88,7 @@ export function buildCruiseModel(scenario: Scenario, view: ViewSettings): Cruise
     result,
     reason,
     beyondModel: result !== null && result.range.tasStart > COMPRESSIBILITY_ONSET * atmosphere.speedOfSound,
+    fuelLine: Boolean(aircraft.propulsion?.baseFuelFlow),
     chart,
   };
 }

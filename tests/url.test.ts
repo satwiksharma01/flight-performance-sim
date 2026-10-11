@@ -282,6 +282,16 @@ describe('structural limits, takeoff flap and runway', () => {
     expect(decodeScenario(encodeScenario(set.scenario)).scenario.aircraft.windmillCd0).toBe(0.03);
   });
 
+  it('removes the 172’s base fuel flow with ff0=0, and keeps a custom engine’s absence of one', () => {
+    expect(decodeScenario('ac=c172&ff0=0').scenario.aircraft.propulsion?.baseFuelFlow).toBeUndefined();
+    const { baseFuelFlow: _b, ...engine } = CESSNA_172S.propulsion!;
+    const scenario: Scenario = { ...DEFAULT_SCENARIO, presetId: null, aircraft: { ...CESSNA_172S, name: 'Constant SFC', propulsion: engine } };
+    const decoded = decodeScenario(encodeScenario(scenario));
+    expect(decoded.problems).toEqual([]);
+    expect(decoded.scenario.aircraft.propulsion).not.toHaveProperty('baseFuelFlow');
+    expect(decoded.scenario.aircraft.propulsion!.sfc! / engine.sfc!).toBeCloseTo(1, 7);
+  });
+
   it('round-trips a custom aircraft without limits or takeoff flap', () => {
     const { structure: _s, clMaxTakeoff: _t, clMaxFlaps: _f, ...bare } = CESSNA_172S;
     const scenario: Scenario = {
@@ -304,7 +314,7 @@ describe('structural limits, takeoff flap and runway', () => {
     const scenario: Scenario = {
       ...DEFAULT_SCENARIO,
       presetId: null,
-      aircraft: { ...CESSNA_172S, name: 'Long range', fuelCapacity: 200, emptyMass: 700, propulsion: { ...(CESSNA_172S.propulsion as PistonEngine), power: 134000, sfc: 8e-8 } },
+      aircraft: { ...CESSNA_172S, name: 'Long range', fuelCapacity: 200, emptyMass: 700, propulsion: { ...(CESSNA_172S.propulsion as PistonEngine), power: 134000, sfc: 8e-8, baseFuelFlow: 0.001 } },
     };
     const decoded = decodeScenario(encodeScenario({ ...scenario, presetId: 'c172' }));
     expect(decoded.problems).toEqual([]);

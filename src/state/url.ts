@@ -121,6 +121,7 @@ const KEY = {
   staticThrust: 'ts',
   zeroThrustSpeed: 'v0',
   sfc: 'sfc',
+  baseFuelFlow: 'ff0',
   // Structural limits for the V-n diagram. str=none removes a preset's.
   structure: 'str',
   nPositive: 'nmax',
@@ -168,7 +169,11 @@ function sameNumber(a: number | undefined, b: number | undefined): boolean {
 
 /** The numbers that define an engine, keyed by their query-string key. */
 function engineFields(p: Propulsion): Record<string, number> {
-  return { ...kindFields(p), ...(p.sfc === undefined ? {} : { [KEY.sfc]: p.sfc }) };
+  return {
+    ...kindFields(p),
+    ...(p.sfc === undefined ? {} : { [KEY.sfc]: p.sfc }),
+    ...(p.baseFuelFlow === undefined ? {} : { [KEY.baseFuelFlow]: p.baseFuelFlow }),
+  };
 }
 
 function kindFields(p: Propulsion): Record<string, number> {
@@ -287,6 +292,9 @@ export function encodeScenario(scenario: Scenario): string {
       for (const [key, value] of Object.entries(engineFields(ac.propulsion))) {
         params.set(key, formatNumber(value));
       }
+      // The decoder starts from the same-kind engine it already has; say so if its base flow must go.
+      const from = start.propulsion?.kind === ac.propulsion.kind ? start.propulsion : DEFAULT_ENGINES[ac.propulsion.kind];
+      if (ac.propulsion.baseFuelFlow === undefined && from.baseFuelFlow !== undefined) params.set(KEY.baseFuelFlow, '0');
     }
   }
 
@@ -392,6 +400,7 @@ function readEngine(params: URLSearchParams, aircraft: Aircraft, problems: strin
   const staticThrust = read(KEY.staticThrust, L.staticThrust);
   const zeroSpeed = read(KEY.zeroThrustSpeed, L.zeroThrustSpeed);
   const sfc = read(KEY.sfc, engine?.kind === 'turbofan' ? L.tsfc : L.bsfc);
+  const baseFlow = read(KEY.baseFuelFlow, L.baseFuelFlow);
 
   const unused = (value: number | undefined, label: string) => {
     if (value === undefined) return;
@@ -407,6 +416,7 @@ function readEngine(params: URLSearchParams, aircraft: Aircraft, problems: strin
     unused(staticThrust, L.staticThrust.label);
     unused(zeroSpeed, L.zeroThrustSpeed.label);
     unused(sfc, L.bsfc.label);
+    unused(baseFlow, L.baseFuelFlow.label);
     const { propulsion: _none, ...glider } = aircraft;
     return glider;
   }
@@ -436,7 +446,15 @@ function readEngine(params: URLSearchParams, aircraft: Aircraft, problems: strin
       };
     }
   }
-  return { ...aircraft, propulsion: sfc === undefined ? engine : { ...engine, sfc } };
+  if (sfc !== undefined) engine = { ...engine, sfc };
+  // A base flow of zero is none.
+  if (baseFlow === 0) {
+    const { baseFuelFlow: _removed, ...rest } = engine;
+    engine = rest;
+  } else if (baseFlow !== undefined) {
+    engine = { ...engine, baseFuelFlow: baseFlow };
+  }
+  return { ...aircraft, propulsion: engine };
 }
 
 /** Structural limits: the base's, overridden key by key, removed by str=none. */

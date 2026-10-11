@@ -71,9 +71,9 @@ export function CruiseTab({ cruise, view, theme }: Props) {
               </p>
               <dl className="readout">
                 <Row label="Best range" value={<strong>{num(result.range.value / (view.unit === 'kt' ? 1852 : 1000))} {distanceUnit(view)}</strong>} />
-                <Row label={jet ? <>flown at V<sub>jr</sub>, max C<sub>L</sub><sup>0.5</sup>/C<sub>D</sub></> : <>flown at V<sub>md</sub>, max L/D</>} value={at(result.range)} />
+                <Row label={cruise.fuelLine ? 'flown at' : jet ? <>flown at V<sub>jr</sub>, max C<sub>L</sub><sup>0.5</sup>/C<sub>D</sub></> : <>flown at V<sub>md</sub>, max L/D</>} value={at(result.range)} />
                 <Row label="Best endurance" value={<strong>{num(result.endurance.value / 3600, 1)} h</strong>} />
-                <Row label={jet ? <>flown at V<sub>md</sub>, max L/D</> : <>flown at V<sub>mp</sub>, max C<sub>L</sub><sup>1.5</sup>/C<sub>D</sub></>} value={at(result.endurance)} />
+                <Row label={cruise.fuelLine ? 'flown at' : jet ? <>flown at V<sub>md</sub>, max L/D</> : <>flown at V<sub>mp</sub>, max C<sub>L</sub><sup>1.5</sup>/C<sub>D</sub></>} value={at(result.endurance)} />
                 {cruise.beyondModel && (
                   <Row label="Caution" value={<span className="caution">The best-range speed is past Mach 0.7, where the polar no longer holds.</span>} />
                 )}
@@ -86,7 +86,11 @@ export function CruiseTab({ cruise, view, theme }: Props) {
 
         <section className="card table-card" aria-labelledby="breguet-h">
           <h3 id="breguet-h">Which speed is best</h3>
-          <p className="card-sub">Each case maximises a different aerodynamic ratio, so each flies a different speed.</p>
+          <p className="card-sub">
+            With constant SFC, each case maximises a different aerodynamic ratio, so each flies a different speed.
+            {cruise.fuelLine &&
+              ' This engine’s fuel flow has a base flow, burned every hour aloft, so its best cruise is a little faster: found numerically.'}
+          </p>
           <dl className="readout">
             <Row label="Propeller, range" value={<>V<sub>md</sub>, max L/D</>} />
             <Row label="Propeller, endurance" value={<>V<sub>mp</sub>, max C<sub>L</sub><sup>1.5</sup>/C<sub>D</sub></>} />
@@ -94,7 +98,7 @@ export function CruiseTab({ cruise, view, theme }: Props) {
             <Row label="Jet, endurance" value={<>V<sub>md</sub>, max L/D</>} />
             <Row
               label="Assumed"
-              value={jet ? 'thrust SFC constant' : `propeller efficiency ${CRUISE_PROPELLER_EFFICIENCY}, brake SFC constant`}
+              value={`${jet ? '' : `propeller efficiency ${CRUISE_PROPELLER_EFFICIENCY}, `}${cruise.fuelLine ? 'fuel flow a straight line in output' : `${jet ? 'thrust' : 'brake'} SFC constant`}`}
             />
           </dl>
         </section>

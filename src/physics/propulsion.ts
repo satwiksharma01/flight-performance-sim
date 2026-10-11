@@ -48,6 +48,11 @@ export interface PistonEngine {
   readonly propeller: Propeller;
   /** Brake specific fuel consumption [kg/(W s)]. Absent: no range */
   readonly sfc?: number;
+  /**
+   * Fuel flow at zero output [kg/s], extrapolated: the intercept of the
+   * engine's fuel-flow line, with sfc its slope. Absent: SFC is constant
+   */
+  readonly baseFuelFlow?: number;
 }
 
 export interface TurbopropEngine {
@@ -59,6 +64,11 @@ export interface TurbopropEngine {
   readonly propeller: Propeller;
   /** Brake specific fuel consumption [kg/(W s)]. Absent: no range */
   readonly sfc?: number;
+  /**
+   * Fuel flow at zero output [kg/s], extrapolated: the intercept of the
+   * engine's fuel-flow line, with sfc its slope. Absent: SFC is constant
+   */
+  readonly baseFuelFlow?: number;
 }
 
 export interface TurbofanEngine {
@@ -69,6 +79,11 @@ export interface TurbofanEngine {
   readonly lapseExponent: number;
   /** Thrust specific fuel consumption [kg/(N s)]. Absent: no range */
   readonly sfc?: number;
+  /**
+   * Fuel flow at zero output [kg/s], extrapolated: the intercept of the
+   * engine's fuel-flow line, with sfc its slope. Absent: SFC is constant
+   */
+  readonly baseFuelFlow?: number;
 }
 
 /** 1 lb/(hp h) and 1 lb/(lbf h), in kg/(W s) and kg/(N s). */
@@ -144,7 +159,20 @@ export const PROPULSION_LIMITS = {
   // 0.1 to 2 lb/(hp h) brake; 0.1 to 3 lb/(lbf h) thrust
   bsfc: { label: 'Specific fuel consumption', min: 0.1 * BSFC_LB_PER_HP_H, max: 2 * BSFC_LB_PER_HP_H },
   tsfc: { label: 'Specific fuel consumption', min: 0.1 * TSFC_LB_PER_LBF_H, max: 3 * TSFC_LB_PER_LBF_H },
+  // kg/s; zero means none
+  baseFuelFlow: { label: 'Base fuel flow', min: 0, max: 5 },
 } as const;
+
+/**
+ * Fuel flow [kg/s] at an output: shaft power [W] for a piston or turboprop,
+ * thrust [N] for a jet. A straight line, the Willans line: sfc is its slope
+ * and baseFuelFlow its intercept, so consumption per unit output rises at low
+ * power, as the 172S's POH cruise table shows. Without a base flow, SFC is
+ * constant.
+ */
+export function fuelFlow(engine: Propulsion, output: number): number {
+  return (engine.baseFuelFlow ?? 0) + (engine.sfc ?? 0) * output;
+}
 
 /** A starting point for each engine kind, used when the kind is switched. */
 export const DEFAULT_ENGINES: Record<EngineKind, Propulsion> = {

@@ -18,6 +18,7 @@ const KT = 1852 / 3600;
  *   CD0 power on        cruise 124 KTAS at 75 % power and 8,500 ft, at the
  *                       cruise propeller efficiency of 0.8
  *   propeller line      best rate of climb 730 ft/min at 74 KIAS, sea level
+ *   fuel-flow line      two cells of the POH cruise table, 77 % and 44 % power
  *
  * The two CD0s differ by the windmilling propeller, 0.0194: a fixed-pitch
  * propeller at idle is a drag brake. One polar fitted to the glide made
@@ -56,7 +57,11 @@ export const CESSNA_172S: Aircraft = {
     power: 180 * 745.699872, // Lycoming IO-360-L2A, 180 hp at 2,700 rpm
     // Fitted, with the exact climb, to the POH best rate of climb: 730 ft/min at 74 KIAS, sea level
     propeller: { staticThrust: 3313, zeroThrustSpeed: 103.9 },
-    sfc: 0.45 * BSFC_LB_PER_HP_H, // assumed: Anderson's CP-1 value, not from the POH
+    // Fitted: the fuel-flow line through two POH cruise cells at standard temperature,
+    // 10.5 GPH at 77 % (2,000 ft, 2,550 rpm) and 6.6 GPH at 44 % (12,000 ft, 2,300 rpm),
+    // avgas at 6 lb/gal. The slope is 3.9 GPH per 33 % of 180 hp; the intercept 1.4 GPH.
+    sfc: ((3.9 / 33) * 6 / 1.8) * BSFC_LB_PER_HP_H, // 0.394 lb/(hp h)
+    baseFuelFlow: (1.4 * 6 * 0.45359237) / 3600, // kg/s
   },
   emptyMass: 1663 * 0.45359237, // POH standard empty weight
   fuelCapacity: 53 * 6 * 0.45359237, // 53 gal usable avgas at 6 lb/gal
