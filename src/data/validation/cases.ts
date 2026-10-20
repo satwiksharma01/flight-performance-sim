@@ -22,7 +22,7 @@ import { ceilings, climbPerformance, type PoweredAircraft } from '../../physics/
 import { RUNWAY_SURFACES, landing, takeoff } from '../../physics/performance/field.js';
 import { breguet } from '../../physics/performance/range.js';
 import { cruiseSpeed } from '../../physics/performance/cruise.js';
-import { BSFC_LB_PER_HP_H } from '../../physics/propulsion.js';
+import { BSFC_LB_PER_HP_H, TSFC_LB_PER_LBF_H } from '../../physics/propulsion.js';
 import { vnDiagram, type StructuralLimits } from '../../physics/performance/vn.js';
 import { CESSNA_172S } from '../aircraft/presets.js';
 import { POH_SOURCE, pohCondition, pohRange } from './poh-c172s.js';
@@ -106,6 +106,7 @@ const SOURCE = {
   naca: 'NACA Report 1135 (1953), tables I and II',
   anderson: 'Anderson, Introduction to Flight, ch. 6, CP-1 and CP-2',
   andersonRange: 'Anderson, Introduction to Flight, 8th ed., Example 6.19',
+  andersonJetRange: 'Anderson, Introduction to Flight, 8th ed., Example 6.20',
   poh: 'Cessna 172S Pilot’s Operating Handbook, sections 1, 4 and 5',
 } as const;
 
@@ -137,6 +138,21 @@ const cp1Breguet = lazy(() =>
     },
     seaLevel().density,
     65 * 5.64 * LB,
+  )!,
+);
+/**
+ * CP-2, the CJ-1, for Anderson's jet example: 1,119 gal at 6.67 lb/gal, so
+ * 7,463 lb of fuel, 0.6 lb/(lbf h), at 22,000 ft. Breguet doesn't use the
+ * engine's thrust.
+ */
+const cp2Breguet = lazy(() =>
+  breguet(
+    {
+      ...fromBook(19815, 318, 8.93, 0.81, 0.02),
+      propulsion: { kind: 'turbofan', thrust: 1, lapseExponent: 1, sfc: 0.6 * TSFC_LB_PER_LBF_H },
+    },
+    atPressureAltitude(22000 * FT).density,
+    7463 * LB,
   )!,
 );
 const c172 = CESSNA_172S as PoweredAircraft;
@@ -335,7 +351,34 @@ export const CASES: readonly ValidationCase[] = [
     model: () => cp1Breguet().endurance.value / 3600,
     tolerance: { relative: 0.005 },
     source: SOURCE.andersonRange,
-    note: 'The book flies V_mp without a stall check; here the simulator’s 1.2 V_s floor is lifted to match. CP-2’s range and endurance are pending a verified source.',
+    note: 'The book flies V_mp without a stall check; here the simulator’s 1.2 V_s floor is lifted to match.',
+  },
+  {
+    id: 'anderson-cp2-range',
+    group: 'textbook',
+    quantity: 'Maximum range, Breguet',
+    condition: 'CP-2: 19,815 to 12,352 lb, 0.6 lb/(lbf h), 22,000 ft, at (C_L^0.5/C_D)max',
+    role: 'reference',
+    published: 3630,
+    unit: 'mi',
+    decimals: 0,
+    model: () => cp2Breguet().range.value / 1609.344,
+    tolerance: { relative: 0.005 },
+    source: SOURCE.andersonJetRange,
+  },
+  {
+    id: 'anderson-cp2-endurance',
+    group: 'textbook',
+    quantity: 'Maximum endurance, Breguet',
+    condition: 'CP-2: as above, at (C_L/C_D)max',
+    role: 'reference',
+    published: 13.3,
+    unit: 'h',
+    decimals: 2,
+    model: () => cp2Breguet().endurance.value / 3600,
+    tolerance: { relative: 0.005 },
+    source: SOURCE.andersonJetRange,
+    note: 'The book rounds (L/D)max to 16.9; the polar gives 16.85, which is most of the 0.2 %. It takes 0.001184 slug/ft³ at 22,000 ft, where the ISA gives 0.0011836. The printed answers, R = 19.2 × 10⁶ ft and E = 4.79 × 10⁴ s, are kept as published.',
   },
 
   {

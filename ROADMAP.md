@@ -369,8 +369,9 @@ curve move. A complete product at a tiny scope.
 ### v0.6 — Cruise and comparison
 - [x] Breguet range/endurance, all four cases — *checked against an independent
       quadrature of the fuel burn to 1e-15, and against Anderson's published CP-1
-      answers (Example 6.19: 1,207 mi, 14.4 h) to 0.25 %; CP-2 pending a verified
-      source. An optimum slower than 1.2 V_s is held there (the 172's V_mp is
+      answers (Example 6.19: 1,207 mi, 14.4 h) to 0.25 %, and CP-2's (Example 6.20,
+      the CJ-1 jet: 3,630 mi, 13.3 h) to 0.2 %, added 2026-10-20 once the printed
+      answers were verified. An optimum slower than 1.2 V_s is held there (the 172's V_mp is
       below its stall)*
 - [x] Payload–range diagram — *no zero-fuel-mass limit: max payload is the useful load*
 - [x] Cruise at set power, checked against the 172S POH cruise and range tables —

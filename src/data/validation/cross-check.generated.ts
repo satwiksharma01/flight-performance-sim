@@ -2,7 +2,7 @@
 // The /validation page shows it as the last recorded run; CI re-runs the check on every push.
 
 export const CROSS_CHECK = {
-  ranOn: "2026-10-11",
+  ranOn: "2026-10-20",
   python: "3.13.2",
   scipy: "1.16.2",
   sweep: "57 atmospheres x 5 airspeeds, 9 polar cases, 20 climb and glide cases, 8 ceiling pairs, 6 V-n diagrams, 10 turn cases, 90 takeoff and landing cases, 6 range and endurance cases",

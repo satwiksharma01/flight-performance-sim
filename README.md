@@ -146,7 +146,7 @@ cross-check on every push, and deploys to GitHub Pages when they pass. See [ROAD
 
 ## Validation
 
-The **Validation** page (`validation.html`) lists 48 published figures from four
+The **Validation** page (`validation.html`) lists 50 published figures from four
 sources: the US Standard Atmosphere 1976 tables, NACA Report 1135, Anderson's worked
 examples, and the Cessna 172S POH. Each shows published value, model value,
 difference, tolerance and status, computed live in the browser. Below them are the
@@ -169,8 +169,9 @@ every push.
 
 What the 172S comparison says, in brief:
 
-- **Range and endurance:** Anderson's CP-1 example (*Introduction to Flight*, 8th ed.,
-  Example 6.19), 1,207 mi and 14.4 h, reproduced to within 0.25 %.
+- **Range and endurance:** Anderson's worked examples (*Introduction to Flight*, 8th
+  ed.), reproduced to within 0.25 %: the propeller CP-1 (Example 6.19, 1,207 mi and
+  14.4 h) and the CJ-1 jet CP-2 (Example 6.20, 3,630 mi and 13.3 h).
 - **Limits:** `V_A` at all three published weights within 1.3 kt, never fitted.
 - **Cruise at a set power:** 105 of the POH's 111 cruise speeds within 3 %, mean
   −0.7 %, from one fitted figure; the six misses are low power on hot days high up.
@@ -187,7 +188,7 @@ What the 172S comparison says, in brief:
 ```bash
 npm install
 npm run dev          # the explorer at http://localhost:5173, validation at /validation.html
-npm test             # 412 tests
+npm test             # 414 tests
 npm run validate     # cross-check against the independent Python reference (needs SciPy)
 npm run typecheck
 npm run build        # static site in dist/, relative paths, any host
@@ -222,7 +223,7 @@ npm run build        # static site in dist/, relative paths, any host
 | `src/data/validation/` | The validation dataset, the POH tables, and the cross-check's last run |
 | `src/app/components/` | React controls, readouts, and the uPlot chart with its marker overlays |
 
-412 tests, covering the published ISA table at five altitudes, layer continuity,
+414 tests, covering the published ISA table at five altitudes, layer continuity,
 profile inversion, every closed-form optimum cross-checked against a brute-force
 scan, permalink round-trip stability, and the chart model's physics: the drag curve
 is identical against EAS at every altitude and slides right by `sqrt(ρ₀/ρ)` against
