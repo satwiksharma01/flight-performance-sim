@@ -1190,3 +1190,69 @@ code {
 section[id] {
   scroll-margin-top: 16px;
 }
+
+/* --- The working behind a tile ------------------------------------------- */
+
+.tile--button {
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.tile--button:hover,
+.tile--button[aria-expanded='true'] {
+  border-color: var(--accent);
+}
+
+.tile-more {
+  font-size: 11.5px;
+  color: var(--accent);
+  margin-top: 2px;
+}
+
+.working {
+  padding: 14px 16px;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.working-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.working-head h3 {
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.working-steps {
+  margin: 0;
+  padding-left: 22px;
+  display: grid;
+  gap: 12px;
+}
+
+.eq {
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.eq-numbers {
+  color: var(--ink-2);
+}
+
+.working-where {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.working-given {
+  font-size: 13px;
+}

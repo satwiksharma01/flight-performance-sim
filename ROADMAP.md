@@ -392,6 +392,11 @@ curve move. A complete product at a tiny scope.
 ### v1.0 — Polish
 - [ ] Educational mode: click a result → the equation **with the actual numbers
       substituted**, not just symbols. The substitution is what makes it teach.
+      *Headline tiles done: each opens its working, every step as the formula, the
+      formula with the numbers, and the result. One parse of each formula both
+      evaluates and draws it, and tests check every chain lands on its tile's value,
+      also when reworked from the six-figure numbers shown. Numerical results (V_y,
+      the ceiling, V_max, minimum sink) show the condition solved. The tabs next*
 - [ ] Export chart as PNG / data as CSV
 - [ ] Publish `physics/` as a standalone npm package
 

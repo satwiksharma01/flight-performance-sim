@@ -1,0 +1,107 @@
+import { describe, expect, it } from 'vitest';
+import { evaluate } from '../src/app/expression.js';
+import { rounded, result, tileWorking, type TileId, type Working } from '../src/app/working.js';
+import { DEFAULT_VIEW, buildChartModel, type ViewSettings } from '../src/app/model.js';
+import { DEFAULT_SCENARIO, type Scenario } from '../src/state/url.js';
+import { PRESETS } from '../src/data/aircraft/presets.js';
+import { SERVICE_CEILING_RATE } from '../src/physics/performance/climb.js';
+import type { PistonEngine } from '../src/physics/propulsion.js';
+
+const FPM = 60 / 0.3048;
+const view: ViewSettings = { ...DEFAULT_VIEW, axis: 'eas' };
+
+describe('expression', () => {
+  it('follows the usual precedence, with right-associative powers', () => {
+    expect(evaluate('1 + 2 * 3 ^ 2', {})).toBe(19);
+    expect(evaluate('2 ^ 3 ^ 2', {})).toBe(512);
+    expect(evaluate('-2 ^ 2', {})).toBe(-4);
+    expect(evaluate('2 ^ -1', {})).toBe(0.5);
+    expect(evaluate('(1 + 2) / 4 - -1', {})).toBe(1.75);
+    expect(evaluate('sqrt(x) * ln(1) + cos(0) + atan(1) * 4 / pi', { x: 9 })).toBeCloseTo(2, 15);
+    expect(evaluate('2.5e-3 * 1e3', {})).toBeCloseTo(2.5, 15);
+  });
+
+  it('refuses what it can’t evaluate', () => {
+    expect(() => evaluate('a + 1', {})).toThrow(/No value for "a"/);
+    expect(() => evaluate('(1 + 2', {})).toThrow(SyntaxError);
+    expect(() => evaluate('1 2', {})).toThrow(SyntaxError);
+    expect(() => evaluate('1 $ 2', {})).toThrow(SyntaxError);
+  });
+});
+
+/** Work the chain again from the givens and every step rounded as the working shows them. */
+function fromScreen(working: Working): number[] {
+  const values: Record<string, number> = Object.fromEntries(Object.entries(working.given).map(([k, g]) => [k, rounded(g.value)]));
+  return working.steps.map((s) => (values[s.name] = rounded(evaluate(s.formula, values))));
+}
+
+const step = (w: Working, name: string) => w.steps.find((s) => s.name === name)!.value;
+
+const SCENARIOS: readonly [string, Scenario][] = [
+  ['172, sea level', DEFAULT_SCENARIO],
+  ['172, 8,000 ft, ISA +15, 30° bank, light', { ...DEFAULT_SCENARIO, altitude: 8000 * 0.3048, deltaISA: 15, loadFactor: 1 / Math.cos(Math.PI / 6), mass: 1000 }],
+  ['172, cold and below sea level', { ...DEFAULT_SCENARIO, altitude: -300, deltaISA: -30 }],
+  ['172 without windmilling drag', { ...DEFAULT_SCENARIO, presetId: null, aircraft: { ...PRESETS.c172, windmillCd0: undefined as never } }],
+  ['jet, FL350', { ...DEFAULT_SCENARIO, presetId: 'jet-trainer', aircraft: PRESETS['jet-trainer'], altitude: 35000 * 0.3048, tas: 200 }],
+  ['jet, FL410: density altitude in the isothermal layer', { ...DEFAULT_SCENARIO, presetId: 'jet-trainer', aircraft: PRESETS['jet-trainer'], altitude: 41000 * 0.3048, deltaISA: 5, tas: 200 }],
+  ['172, turbocharged, 10,000 ft', { ...DEFAULT_SCENARIO, presetId: null, aircraft: { ...PRESETS.c172, propulsion: { ...(PRESETS.c172.propulsion as PistonEngine), criticalAltitude: 4000 } }, altitude: 3000 }],
+  ['172 with thrust held to P/V', { ...DEFAULT_SCENARIO, presetId: null, aircraft: { ...PRESETS.c172, propulsion: { ...(PRESETS.c172.propulsion as PistonEngine), propeller: { staticThrust: 6000, zeroThrustSpeed: 200 } } } }],
+  ['sailplane, 1,500 m', { ...DEFAULT_SCENARIO, presetId: 'sailplane', aircraft: PRESETS.sailplane, altitude: 1500, tas: 25 }],
+];
+
+describe('the working behind each tile', () => {
+  for (const [label, scenario] of SCENARIOS) {
+    describe(label, () => {
+      const model = buildChartModel(scenario, view);
+      const work = (id: TileId) => tileWorking(id, scenario, model, view);
+
+      it('lands every chain on the value its tile shows', () => {
+        expect(work('density-altitude')).not.toBeNull();
+        const stall = model.markers.find((m) => m.kind === 'stall')!;
+        expect(result(work('density-altitude')!)).toBeCloseTo(model.atmosphere.densityAltitude, 5); // m
+        expect(result(work('stall')!) / stall.tas).toBeCloseTo(1, 12);
+
+        const glide = work('glide')!;
+        expect(step(glide, 'E') / model.glide.best.ratio).toBeCloseTo(1, 12);
+        expect(step(glide, 'V') / model.glide.best.tas).toBeCloseTo(1, 12);
+        expect((result(glide) * FPM) / model.glide.best.sinkFpm).toBeCloseTo(1, 12);
+        expect((result(work('min-sink')!) * FPM) / model.glide.minSink.sinkFpm).toBeCloseTo(1, 12);
+        expect(result(work('glide-distance')!)).toBeCloseTo(model.glide.distanceToSeaLevel, 6);
+
+        const climb = model.climb;
+        if (!climb) {
+          expect(work('climb')).toBeNull();
+          return;
+        }
+        const roc = work('climb')!;
+        expect((result(roc) * FPM) / climb.vy.rocFpm).toBeCloseTo(1, 10);
+        expect(step(roc, 'sin_gamma')).toBeCloseTo(Math.sin(roc.given.gamma!.value), 12);
+        if (climb.serviceCeilingFt !== null) expect(result(work('ceiling')!) / SERVICE_CEILING_RATE).toBeCloseTo(1, 4);
+        if (climb.vmax) {
+          const vmax = work('vmax')!;
+          expect(Math.abs(result(vmax)) / step(vmax, 'D')).toBeLessThan(1e-6);
+        }
+      });
+
+      it('reworks from the rounded numbers on screen to the same results', () => {
+        for (const id of ['density-altitude', 'stall', 'climb', 'ceiling', 'glide', 'vmax', 'min-sink', 'glide-distance'] as const) {
+          const w = work(id);
+          if (!w) continue;
+          const screen = fromScreen(w);
+          w.steps.forEach((s, i) => {
+            // Thrust less drag cancels when the climb is shallow, so it and what follows are compared on
+            // the scale of the thrust; heights and distances, which can be zero, to a tenth of a metre.
+            const thrust = () => step(w, 'T') / w.given.W!.value;
+            const scale =
+              s.name === 'T_minus_D' ? step(w, 'D')
+              : s.name === 'sin_gamma' ? thrust()
+              : s.name === 'RoC' ? thrust() * w.given.V!.value
+              : s.unit === 'm' ? Math.max(Math.abs(s.value), 1000)
+              : Math.abs(s.value);
+            expect(Math.abs(screen[i]! - s.value) / scale, `${id}: ${s.name}`).toBeLessThan(1e-4);
+          });
+        }
+      });
+    });
+  }
+});

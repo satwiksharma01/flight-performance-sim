@@ -92,6 +92,11 @@ cross-check on every push, and deploys to GitHub Pages when they pass. See [ROAD
   exponents: stall speed ±0.50 in weight, wing area and CLmax.
 - **SI or US units** for force, power, weight and area: N, kW and kg, or lbf, hp
   and lb.
+- **The working behind every headline number.** Click a tile (density altitude,
+  stall speed, best climb, service ceiling, best glide, maximum level speed) for its
+  equation, then the same equation with this scenario's numbers in, then the result,
+  with every input listed and sourced. The working is computed from the formulas it
+  shows, and the tests check it lands on the tile.
 - **Every scenario is a link.** `?ac=c172&h=2438.4&disa=15` is a Cessna at
   8,000 ft on an ISA +15 day. An edited preset stays short: `?ac=c172&cd0=0.03`.
 
@@ -143,6 +148,8 @@ cross-check on every push, and deploys to GitHub Pages when they pass. See [ROAD
     10.3 GPH, the POH's figures. Drop to 45 % and the speed falls to 93 KTAS but the
     range grows, because fuel flow falls faster than speed. The validation page has
     every cell of the POH's cruise table against the model.
+14. **Show the working.** Click the stall-speed tile, then bank to 60°: the load factor
+    n in `V_s = √(2 n W / (ρ S C_Lmax))` goes to 2, and the speed rises by √2.
 
 ## Validation
 
@@ -188,7 +195,7 @@ What the 172S comparison says, in brief:
 ```bash
 npm install
 npm run dev          # the explorer at http://localhost:5173, validation at /validation.html
-npm test             # 414 tests
+npm test             # 434 tests
 npm run validate     # cross-check against the independent Python reference (needs SciPy)
 npm run typecheck
 npm run build        # static site in dist/, relative paths, any host
@@ -220,10 +227,11 @@ npm run build        # static site in dist/, relative paths, any host
 | `src/app/envelope.ts`, `runway.ts`, `cruise.ts`, `contour.ts` | The envelope, takeoff and range tabs' models, and marching-squares contours |
 | `src/app/compare.ts` | The second aircraft: same condition, same MTOW fraction, and the side-by-side table |
 | `src/app/sensitivity.ts` | Elasticities by central difference, ranked, with a templated sentence |
+| `src/app/working.ts`, `expression.ts` | The working behind each tile: formulas in a small expression language, evaluated and drawn from one parse |
 | `src/data/validation/` | The validation dataset, the POH tables, and the cross-check's last run |
 | `src/app/components/` | React controls, readouts, and the uPlot chart with its marker overlays |
 
-414 tests, covering the published ISA table at five altitudes, layer continuity,
+434 tests, covering the published ISA table at five altitudes, layer continuity,
 profile inversion, every closed-form optimum cross-checked against a brute-force
 scan, permalink round-trip stability, and the chart model's physics: the drag curve
 is identical against EAS at every altitude and slides right by `sqrt(ρ₀/ρ)` against

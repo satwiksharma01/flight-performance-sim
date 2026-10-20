@@ -415,7 +415,7 @@ export function App() {
             </div>
           ) : (
             <>
-              <Tiles model={model} view={view} />
+              <Tiles model={model} view={view} scenario={scenario} />
               <nav className="tabs" aria-label="Views">
                 {(Object.keys(TAB_NAMES) as Tab[]).map((tab) => (
                   <button

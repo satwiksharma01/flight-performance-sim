@@ -1,7 +1,10 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { G0, turnRadius, turnRate, type AirspeedSet, type Propulsion } from '../../physics/index.js';
 import { toForce, toUnit, type ChartModel, type MarkerView, type ViewSettings } from '../model.js';
 import { UNIT_NAME, axisSpeed, feet, force, length, mach, mass, num, otherPower, power, signed, speed } from '../format.js';
+import type { Scenario } from '../../state/url.js';
+import { tileWorking, type TileId } from '../working.js';
+import { WorkingCard } from './Working.js';
 
 /** kg/m³ to slug/ft³: (1/14.5939029 slug per kg) × 0.3048³ m³ per ft³ */
 const SLUG_FT3_PER_KG_M3 = (0.3048 * 0.3048 * 0.3048) / 14.5939029372;
@@ -33,29 +36,53 @@ const fpm = (value: number) => `${num(value)} ft/min`;
 const ftValue = (value: number) => `${num(value)} ft`;
 const nm = (metres: number) => `${num(metres / 1852, metres < 18520 ? 1 : 0)} NM`;
 
-function Tile({ label, value, sub }: { label: ReactNode; value: ReactNode; sub: ReactNode }) {
-  return (
-    <div className="card tile">
+interface Toggle {
+  readonly open: boolean;
+  readonly onToggle: () => void;
+}
+
+function Tile({ label, value, sub, toggle }: { label: ReactNode; value: ReactNode; sub: ReactNode; toggle?: Toggle | undefined }) {
+  const content = (
+    <>
       <span className="tile-label">{label}</span>
       <span className="tile-value">{value}</span>
       <span className="tile-sub">{sub}</span>
-    </div>
+    </>
+  );
+  if (!toggle) return <div className="card tile">{content}</div>;
+  return (
+    <button
+      type="button"
+      className="card tile tile--button"
+      aria-expanded={toggle.open}
+      aria-controls={toggle.open ? 'working' : undefined}
+      onClick={toggle.onToggle}
+    >
+      {content}
+      <span className="tile-more">{toggle.open ? 'Hide the working' : 'Show the working'}</span>
+    </button>
   );
 }
 
-export function Tiles({ model, view }: { model: ChartModel; view: ViewSettings }) {
+export function Tiles({ model, view, scenario }: { model: ChartModel; view: ViewSettings; scenario: Scenario }) {
   const stall = model.markers.find((m) => m.kind === 'stall');
   const { atmosphere, climb, glide } = model;
+  const [open, setOpen] = useState<TileId | null>(null);
+  const working = open ? tileWorking(open, scenario, model, view) : null;
+  const toggle = (id: TileId): Toggle => ({ open: open === id, onToggle: () => setOpen(open === id ? null : id) });
 
   return (
+    <>
     <div className="tiles">
       <Tile
+        toggle={toggle('density-altitude')}
         label="Density altitude"
         value={feet(atmosphere.densityAltitude)}
         sub={`PA ${feet(atmosphere.pressureAltitude)} · OAT ${num(atmosphere.temperature - 273.15)} °C`}
       />
       {stall && (
         <Tile
+          toggle={toggle('stall')}
           label={
             <>
               Stall speed, <Sub symbol="V" sub="s" />
@@ -68,6 +95,7 @@ export function Tiles({ model, view }: { model: ChartModel; view: ViewSettings }
       {climb ? (
         <>
           <Tile
+            toggle={toggle('climb')}
             label={
               <>
                 Best rate of climb, <Sub symbol="V" sub="y" />
@@ -81,6 +109,7 @@ export function Tiles({ model, view }: { model: ChartModel; view: ViewSettings }
             }
           />
           <Tile
+            toggle={climb.serviceCeilingFt === null ? undefined : toggle('ceiling')}
             label="Service ceiling"
             value={climb.serviceCeilingFt === null ? 'out of reach' : ftValue(climb.serviceCeilingFt)}
             sub={climb.absoluteCeilingFt === null ? 'at this weight and ISA day' : `absolute ${ftValue(climb.absoluteCeilingFt)}, at this weight`}
@@ -88,17 +117,19 @@ export function Tiles({ model, view }: { model: ChartModel; view: ViewSettings }
         </>
       ) : (
         <>
-          <Tile label="Minimum sink" value={fpm(glide.minSink.sinkFpm)} sub={`at ${axisSpeed(glide.minSink.speeds, view)}`} />
-          <Tile label="Glide from here" value={nm(glide.distanceToSeaLevel)} sub="to sea level, still air, at best glide" />
+          <Tile toggle={toggle('min-sink')} label="Minimum sink" value={fpm(glide.minSink.sinkFpm)} sub={`at ${axisSpeed(glide.minSink.speeds, view)}`} />
+          <Tile toggle={toggle('glide-distance')} label="Glide from here" value={nm(glide.distanceToSeaLevel)} sub="to sea level, still air, at best glide" />
         </>
       )}
       <Tile
+        toggle={toggle('glide')}
         label="Best glide"
         value={`${num(glide.best.ratio, 1)} : 1`}
         sub={`at ${axisSpeed(glide.best.speeds, view)}, sinking ${fpm(glide.best.sinkFpm)}`}
       />
       {climb && (
         <Tile
+          toggle={climb.vmax ? toggle('vmax') : undefined}
           label={
             <>
               Maximum level speed, <Sub symbol="V" sub="max" />
@@ -115,6 +146,8 @@ export function Tiles({ model, view }: { model: ChartModel; view: ViewSettings }
         />
       )}
     </div>
+    {working && <WorkingCard working={working} onClose={() => setOpen(null)} />}
+    </>
   );
 }
 
