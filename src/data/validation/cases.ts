@@ -17,7 +17,8 @@
 
 import { atPressureAltitude } from '../../physics/atmosphere.js';
 import { pitotPressureRatio } from '../../physics/airspeed.js';
-import { maxLiftToDrag, powerOff, stallSpeed, vMinDrag, type Aircraft } from '../../physics/aero.js';
+import { maxLiftToDrag, powerOff, stallSpeed, type Aircraft } from '../../physics/aero.js';
+import { bestGlide } from '../../physics/performance/glide.js';
 import { ceilings, climbPerformance, type PoweredAircraft } from '../../physics/performance/climb.js';
 import { RUNWAY_SURFACES, landing, takeoff } from '../../physics/performance/field.js';
 import { breguet } from '../../physics/performance/range.js';
@@ -418,10 +419,10 @@ export const CASES: readonly ValidationCase[] = [
     published: 68,
     unit: 'kt',
     decimals: 1,
-    model: () => vMinDrag(powerOff(c172), seaLevel().density) / KT,
+    model: () => bestGlide(c172, seaLevel()).tas / KT,
     tolerance: { absolute: 0.5 },
     source: SOURCE.poh,
-    note: 'With the glide ratio, sets e = 0.717 and the power-off CD₀ = 0.052.',
+    note: 'With the glide ratio, sets e = 0.717 and the power-off CD₀ = 0.052, fitted with the small-angle V_md (68.0 kt). The exact glide, the one the explorer shows, carries W cos γ at a 6.3° path and flies 67.8 kt: inside the POH’s one-knot resolution.',
   },
   {
     id: 'c172-glide-ratio',

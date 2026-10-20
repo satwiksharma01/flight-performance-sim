@@ -186,8 +186,10 @@ export function minimumDrag(aircraft: Aircraft): number {
 /**
  * Minimum-drag speed V_md [m/s].
  *
- * Also the max-L/D speed, the best glide speed, and the propeller best-range
- * speed — all the same condition seen from different directions.
+ * Also the max-L/D speed and the propeller best-range speed, the same
+ * condition seen from different directions. On the power-off polar it is the
+ * best-glide speed in the small-angle limit; the exact glide (glide.ts)
+ * carries W cos γ and flies slightly slower.
  */
 export function vMinDrag(aircraft: Aircraft, density: number): number {
   return Math.sqrt(
@@ -198,8 +200,9 @@ export function vMinDrag(aircraft: Aircraft, density: number): number {
 /**
  * Minimum-power speed V_mp = V_md / 3^(1/4) ~= 0.760 * V_md.
  *
- * Minimises D*V rather than D. This is the minimum-sink glide speed and the
- * propeller best-endurance speed. It maximises CL^(3/2)/CD.
+ * Minimises D*V rather than D, and maximises CL^(3/2)/CD: the propeller
+ * best-endurance speed, and on the power-off polar the minimum-sink speed in
+ * the small-angle limit.
  */
 export function vMinPower(aircraft: Aircraft, density: number): number {
   return vMinDrag(aircraft, density) / Math.pow(3, 0.25);
