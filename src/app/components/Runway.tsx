@@ -1,15 +1,20 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { tasToCas, type AtmosphereState } from '../../physics/index.js';
 import { RUNWAY_SURFACES, type LandingDistances, type TakeoffDistances } from '../../physics/performance/field.js';
 import type { DistanceChart, RunwayModel } from '../runway.js';
 import { SYSTEM_UNITS, toLength, type ViewSettings } from '../model.js';
 import { feet, length, num, speed, tick } from '../format.js';
 import { Chart } from './Chart.js';
+import { ShowWorking, WorkingCard } from './Working.js';
+import { runwayWorking, type RunwayWorkingId } from '../working-tabs.js';
+import type { Scenario } from '../../state/url.js';
 
 const FT = 0.3048;
+const WORKING_ID = 'runway-working';
 
 interface Props {
   readonly runway: RunwayModel;
+  readonly scenario: Scenario;
   readonly view: ViewSettings;
   readonly theme: string;
   readonly onAltitude: (altitudeFt: number) => void;
@@ -19,8 +24,15 @@ function cas(tas: number, atmosphere: AtmosphereState, view: ViewSettings): stri
   return `${speed(tasToCas(tas, atmosphere.pressure, atmosphere.speedOfSound), view.unit)} CAS`;
 }
 
-export function RunwayTab({ runway, view, theme, onAltitude }: Props) {
+export function RunwayTab({ runway, scenario, view, theme, onAltitude }: Props) {
   const { atmosphere, takeoff, landing, takeoffChart, landingChart, pohApplies } = runway;
+  const [open, setOpen] = useState<RunwayWorkingId | null>(null);
+  const working = open ? runwayWorking(open, scenario, runway, view) : null;
+  // A ground run without a closed form (thrust held to P/V on it) has no button.
+  const show = (id: RunwayWorkingId) =>
+    (id === open || runwayWorking(id, scenario, runway, view)) && (
+      <ShowWorking open={open === id} onToggle={() => setOpen(open === id ? null : id)} controls={WORKING_ID} />
+    );
   const unit = SYSTEM_UNITS[view.system].length;
   const surface = RUNWAY_SURFACES[runway.surface];
   const altitudeFt = atmosphere.pressureAltitude / FT;
@@ -111,7 +123,7 @@ export function RunwayTab({ runway, view, theme, onAltitude }: Props) {
                 ]}
                 view={view}
               />
-              <TakeoffReadout r={takeoff} atmosphere={atmosphere} view={view} />
+              <TakeoffReadout r={takeoff} atmosphere={atmosphere} view={view} show={show} />
             </>
           ) : (
             <p className="caution">{takeoff.reason}</p>
@@ -131,7 +143,7 @@ export function RunwayTab({ runway, view, theme, onAltitude }: Props) {
                 ]}
                 view={view}
               />
-              <LandingReadout r={landing} atmosphere={atmosphere} view={view} />
+              <LandingReadout r={landing} atmosphere={atmosphere} view={view} show={show} />
             </>
           ) : (
             <p className="caution">{landing.reason}</p>
@@ -152,9 +164,12 @@ export function RunwayTab({ runway, view, theme, onAltitude }: Props) {
           </dl>
         </section>
       </div>
+      {working && <WorkingCard id={WORKING_ID} working={working} onClose={() => setOpen(null)} />}
     </>
   );
 }
+
+type Show = (id: RunwayWorkingId) => ReactNode;
 
 interface Segment {
   readonly label: string;
@@ -185,11 +200,11 @@ function SegmentBar({ segments, view }: { segments: readonly Segment[]; view: Vi
   );
 }
 
-function TakeoffReadout({ r, atmosphere, view }: { r: TakeoffDistances; atmosphere: AtmosphereState; view: ViewSettings }) {
+function TakeoffReadout({ r, atmosphere, view, show }: { r: TakeoffDistances; atmosphere: AtmosphereState; view: ViewSettings; show: Show }) {
   return (
     <dl className="readout">
-      <Row label="Ground roll" value={length(r.groundRoll, view.system)} dim="run and rotation" strong />
-      <Row label="Over 50 ft" value={length(r.total, view.system)} strong />
+      <Row label="Ground roll" value={length(r.groundRoll, view.system)} dim={<>run and rotation {show('takeoff-roll')}</>} strong />
+      <Row label="Over 50 ft" value={length(r.total, view.system)} dim={show('takeoff-total')} strong />
       <Row label="Stall, takeoff flap" value={cas(r.stallSpeed, atmosphere, view)} dim={`${speed(r.stallSpeed, view.unit)} TAS`} />
       <Row label="Lift-off" value={cas(r.liftOffSpeed, atmosphere, view)} dim={`${speed(r.liftOffSpeed, view.unit)} TAS`} />
       <Row label="At 50 ft" value={cas(r.obstacleSpeed, atmosphere, view)} dim={`${speed(r.obstacleSpeed, view.unit)} TAS`} />
@@ -199,11 +214,11 @@ function TakeoffReadout({ r, atmosphere, view }: { r: TakeoffDistances; atmosphe
   );
 }
 
-function LandingReadout({ r, atmosphere, view }: { r: LandingDistances; atmosphere: AtmosphereState; view: ViewSettings }) {
+function LandingReadout({ r, atmosphere, view, show }: { r: LandingDistances; atmosphere: AtmosphereState; view: ViewSettings; show: Show }) {
   return (
     <dl className="readout">
-      <Row label="Ground roll" value={length(r.groundRoll, view.system)} dim="free roll and braking" strong />
-      <Row label="From 50 ft" value={length(r.total, view.system)} strong />
+      <Row label="Ground roll" value={length(r.groundRoll, view.system)} dim={<>free roll and braking {show('landing-roll')}</>} strong />
+      <Row label="From 50 ft" value={length(r.total, view.system)} dim={show('landing-total')} strong />
       <Row label="Stall, landing flap" value={cas(r.stallSpeed, atmosphere, view)} dim={`${speed(r.stallSpeed, view.unit)} TAS`} />
       <Row label="Approach" value={cas(r.approachSpeed, atmosphere, view)} dim={`${num((r.approachAngle * 180) / Math.PI, 0)}° path`} />
       <Row label="Touchdown" value={cas(r.touchdownSpeed, atmosphere, view)} dim={`${speed(r.touchdownSpeed, view.unit)} TAS`} />

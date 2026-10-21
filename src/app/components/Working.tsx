@@ -2,7 +2,7 @@ import { Fragment, type ReactNode } from 'react';
 import { tokenize, type Token } from '../expression.js';
 import { FIGURES, rounded, type Working } from '../working.js';
 
-const GREEK: Record<string, string> = { rho: 'ρ', gamma: 'γ', sigma: 'σ', phi: 'φ', pi: 'π', eta: 'η', mdot: 'ṁ', mu: 'μ', omega: 'ω' };
+const GREEK: Record<string, string> = { rho: 'ρ', gamma: 'γ', sigma: 'σ', phi: 'φ', pi: 'π', eta: 'η', mdot: 'ṁ', mu: 'μ', omega: 'ω', theta: 'θ', Delta: 'Δ' };
 
 const NAMED: Record<string, ReactNode> = {
   sin_gamma: 'sin γ',
@@ -46,14 +46,15 @@ const SUPERSCRIPT = '⁰¹²³⁴⁵⁶⁷⁸⁹';
 /** A number as the working shows it, to six figures; below 0.001 in powers of ten. */
 export function figure(value: number): string {
   const r = rounded(value);
+  let text = r.toLocaleString('en-US', { maximumSignificantDigits: FIGURES });
   if (r !== 0 && Math.abs(r) < 1e-3) {
     const [mantissa = '', exponent = ''] = r.toExponential(FIGURES - 1).split('e');
-    return `${Number(mantissa)} × 10${exponent.replace('-', '⁻').replace(/\d/g, (d) => SUPERSCRIPT[Number(d)]!)}`;
+    text = `${Number(mantissa)} × 10${exponent.replace('-', '⁻').replace(/\d/g, (d) => SUPERSCRIPT[Number(d)]!)}`;
   }
-  return r.toLocaleString('en-US', { maximumSignificantDigits: FIGURES });
+  return text.replace('-', '−');
 }
 
-const FUNCTION_TEXT: Record<string, string> = { sqrt: '√', atan: 'tan⁻¹', ln: 'ln', cos: 'cos', sin: 'sin' };
+const FUNCTION_TEXT: Record<string, string> = { sqrt: '√', atan: 'tan⁻¹', ln: 'ln', cos: 'cos', sin: 'sin', tan: 'tan', asin: 'sin⁻¹' };
 
 /** Index of the bracket that closes the one at `open`. */
 function closing(tokens: readonly Token[], open: number): number {

@@ -390,7 +390,7 @@ curve move. A complete product at a tiny scope.
       172's stall-limited minimum sink matches the exact (not small-angle) glide*
 
 ### v1.0 — Polish
-- [ ] Educational mode: click a result → the equation **with the actual numbers
+- [x] Educational mode: click a result → the equation **with the actual numbers
       substituted**, not just symbols. The substitution is what makes it teach.
       *Headline tiles done: each opens its working, every step as the formula, the
       formula with the numbers, and the result. One parse of each formula both
@@ -402,7 +402,16 @@ curve move. A complete product at a tiny scope.
       and the set-power cruise as its power balance, fuel flow and time. Envelope tab
       done: V_A as V_S √n in EAS, the Pratt gust load with its mass ratio and
       alleviation factor, the corner speed, this turn from its bank, and P_s at the
-      selected point. The runway tab next*
+      selected point. Runway tab done: each ground run in closed form, since with thrust
+      a straight line in speed the acceleration is a quadratic in V; ∫ (V − V_w) dV / a(V)
+      is a logarithm less an arctangent or a second logarithm, by the discriminant's
+      sign, and a tailwind splits the run where the airspeed passes zero. It agrees
+      with the model's Simpson integration to 1e-7 or better (and with Simpson at 8,192
+      panels to 1e-12 where 512 panels fall 1e-7 short: a sailplane's braking, whose
+      deceleration nearly vanishes at touchdown). The air segments follow Raymer's
+      arcs. A ground run with thrust held to P/V on it has no closed form and no
+      button. The sensitivity tab's elasticities are central differences, described
+      on the tab, and have no working*
 - [ ] Export chart as PNG / data as CSV
 - [ ] Publish `physics/` as a standalone npm package
 

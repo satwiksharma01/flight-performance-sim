@@ -7,7 +7,8 @@ import { DEFAULT_SCENARIO, type Scenario } from '../src/state/url.js';
 import { PRESETS } from '../src/data/aircraft/presets.js';
 import { SERVICE_CEILING_RATE } from '../src/physics/performance/climb.js';
 import { buildCruiseModel } from '../src/app/cruise.js';
-import { envelopeWorking, rangeWorking } from '../src/app/working-tabs.js';
+import { envelopeWorking, rangeWorking, runwayWorking } from '../src/app/working-tabs.js';
+import { buildRunwayModel } from '../src/app/runway.js';
 import { buildEnvelopeModel } from '../src/app/envelope.js';
 import { vnBoundaries } from '../src/physics/performance/vn.js';
 import type { PistonEngine } from '../src/physics/propulsion.js';
@@ -21,7 +22,8 @@ describe('figure', () => {
     expect(figure(0)).toBe('0');
     expect(figure(0.00105838)).toBe('0.00105838');
     expect(figure(6.65623e-8)).toBe('6.65623 × 10⁻⁸');
-    expect(figure(-2.004371e-6)).toBe('-2.00437 × 10⁻⁶');
+    expect(figure(-2.004371e-6)).toBe('−2.00437 × 10⁻⁶');
+    expect(figure(-0.0275677)).toBe('−0.0275677');
   });
 });
 
@@ -205,6 +207,80 @@ describe('the working behind the envelope tab', () => {
     for (const id of ['maneuvering', 'gust', 'corner', 'turn', 'excess-power'] as const) {
       const shown = SCENARIOS.some(([, scenario]) => envelopeWorking(id, scenario, buildEnvelopeModel(scenario, envelopeView), envelopeView));
       expect(shown, id).toBe(true);
+    }
+  });
+});
+
+describe('the working behind the runway tab', () => {
+  const runwayView: ViewSettings = { ...DEFAULT_VIEW, tab: 'field' };
+  const jet = { ...DEFAULT_SCENARIO, presetId: 'jet-trainer', aircraft: PRESETS['jet-trainer'], tas: 100 };
+  const CASES: readonly [string, Scenario][] = [
+    ['172, sea level, calm', DEFAULT_SCENARIO],
+    ['172, 8,000 ft, ISA +15, light, wet grass, headwind', { ...DEFAULT_SCENARIO, altitude: 8000 * 0.3048, deltaISA: 15, mass: 1000, surface: 'wet-grass', headwind: 5 }],
+    ['172, icy, tailwind', { ...DEFAULT_SCENARIO, surface: 'icy-paved', headwind: -3 }],
+    ['172, icy, headwind', { ...DEFAULT_SCENARIO, surface: 'icy-paved', headwind: 4 }],
+    ['172 without windmilling drag, tailwind', { ...DEFAULT_SCENARIO, presetId: null, aircraft: { ...PRESETS.c172, windmillCd0: undefined as never }, headwind: -2 }],
+    ['172 with thrust held to P/V', SCENARIOS[7]![1]],
+    ['jet, sea level', jet],
+    ['jet, 5,000 ft, tailwind', { ...jet, altitude: 1524, headwind: -4 }],
+    ['sailplane', SCENARIOS[8]![1]],
+  ];
+  const IDS = ['takeoff-roll', 'takeoff-total', 'landing-roll', 'landing-total'] as const;
+  const all = (scenario: Scenario) => {
+    const runway = buildRunwayModel(scenario, runwayView);
+    return { runway, works: IDS.map((id) => runwayWorking(id, scenario, runway, runwayView)) };
+  };
+
+  for (const [label, scenario] of CASES) {
+    it(`agrees with the numerical integration: ${label}`, () => {
+      const { runway, works } = all(scenario);
+      const [roll, total, landingRoll, landingTotal] = works;
+      const { takeoff, landing } = runway;
+      if (takeoff.ok) {
+        if (roll) {
+          const run = roll.steps.filter((s) => s.name === 's_run' || s.name === 's_tail').reduce((a, s) => a + s.value, 0);
+          expect(run / takeoff.groundRun).toBeCloseTo(1, 6);
+          expect(result(roll) / takeoff.groundRoll).toBeCloseTo(1, 6);
+        }
+        expect(step(total!, 'gamma') / takeoff.climbAngle).toBeCloseTo(1, 12);
+        expect(result(total!) / takeoff.total).toBeCloseTo(1, 12);
+      } else expect(roll ?? total).toBeNull();
+      if (!landing.ok) throw new Error(landing.reason);
+      // The model integrates by Simpson's rule on 512 panels: 1e-7 short of the exact form for a sailplane,
+      // whose braking deceleration nearly vanishes at touchdown, where its wing carries all its weight.
+      expect(result(landingRoll!) / landing.groundRoll).toBeCloseTo(1, 6);
+      expect(result(landingTotal!) / landing.total).toBeCloseTo(1, 12);
+
+      for (const w of works) {
+        if (!w) continue;
+        const screen = fromScreen(w);
+        expect(screen.at(-1)! / result(w), `${w.title} from the screen`).toBeCloseTo(1, 4);
+      }
+    });
+  }
+
+  it('leaves out the ground run only where thrust is held to P/V on it', () => {
+    const { runway, works } = all(SCENARIOS[7]![1]);
+    expect(runway.takeoff.ok).toBe(true);
+    expect(works[0]).toBeNull();
+    expect(works[1]).not.toBeNull();
+  });
+
+  it('covers every closed form and branch', () => {
+    const formulas = CASES.flatMap(([, scenario]) => all(scenario).works.flatMap((w) => w?.steps.map((s) => `${s.name} = ${s.formula}`) ?? []));
+    for (const marker of [
+      'I = (2 / sqrt(-Delta)) * (atan(',
+      'I = (1 / sqrt(Delta)) * ln(',
+      'I_t = (2 / sqrt(-Delta_t)) * (atan(',
+      'I_t = (1 / sqrt(Delta_t)) * ln(',
+      's_B = (1 / (2 * a_2)) * ln((a_0 + a_2 * V_TD ^ 2) / (a_0 + a_2 * V_w ^ 2))',
+      'a_1 = ',
+      'C_L_g = mu_r / (2 * k)',
+      'C_L_g = C_Lmax / 1.15 ^ 2',
+      's_TR = sqrt(R ^ 2 - (R - h_obs) ^ 2)',
+      's_CL = ',
+    ]) {
+      expect(formulas.some((f) => f.startsWith(marker) || f.includes(marker)), marker).toBe(true);
     }
   });
 });

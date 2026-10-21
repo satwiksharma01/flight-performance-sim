@@ -18,12 +18,15 @@
  * the corner, a level turn, and P_s at the selected point.
  */
 
-import { CRUISE_PROPELLER_EFFICIENCY, G0, RHO0, isPowered, type Aircraft } from '../physics/index.js';
+import { CRUISE_PROPELLER_EFFICIENCY, G0, RHO0, isPowered, k, type Aircraft } from '../physics/index.js';
+import { LANDING_TECHNIQUE, OBSTACLE_HEIGHT, RUNWAY_SURFACES, TAKEOFF_TECHNIQUE } from '../physics/performance/field.js';
 import type { CruiseCase } from '../physics/performance/range.js';
 import { CRUISE_RESERVE, toDistance, type CruiseModel } from './cruise.js';
 import type { EnvelopeModel } from './envelope.js';
+import { evaluate } from './expression.js';
 import { length, num, speed } from './format.js';
 import type { ViewSettings } from './model.js';
+import type { RunwayModel } from './runway.js';
 import { chain, conditionNote, polarGiven, tasShown, thrust, weightGiven, type Given, type StepSpec, type Working } from './working.js';
 import { cruisePowerOf, loadFactorOf, operatingMass, type Scenario } from '../state/url.js';
 
@@ -266,5 +269,217 @@ export function envelopeWorking(id: EnvelopeWorkingId, scenario: Scenario, envel
       ['D', '0.5 * rho * V ^ 2 * S * C_D', 'N'],
       ['P_s', 'V * (T - D) / W', 'm/s', (v) => `${num(v * FPM)} ft/min`],
     ],
+  );
+}
+
+// --- The runway tab ----------------------------------------------------------------
+
+export type RunwayWorkingId = 'takeoff-roll' | 'takeoff-total' | 'landing-roll' | 'landing-total';
+
+/** Coefficients of a ground run's acceleration, a(V) = c0 + c1 V + c2 V², as step names; c1 may be absent. */
+type Quadratic = readonly [c0: string, c1: string | null, c2: string];
+
+/**
+ * ∫ (V − V_w) dV / a(V) from `lo` to `hi`, in closed form: a logarithm of a(V), less a
+ * multiple of ∫ dV / a(V), which is an arctangent or a logarithm by the sign of the
+ * discriminant. With no linear term and no wind, the second part vanishes.
+ */
+function runSteps(name: string, sfx: string, [c0, c1, c2]: Quadratic, lo: string, hi: string, values: Record<string, number>): StepSpec[] {
+  const at = (v: string) => `${c0}${c1 ? ` + ${c1} * ${v}` : ''} + ${c2} * ${v} ^ 2`;
+  const log = `(1 / (2 * ${c2})) * ln((${at(hi)}) / (${at(lo)}))`;
+  if (!c1 && values.V_w === 0) return [[name, log, 'm']];
+  const factor = c1 ? `(${c1} / (2 * ${c2}) + V_w)` : 'V_w';
+  const d = `Delta${sfx}`;
+  const u = (v: string) => `(2 * ${c2} * ${v}${c1 ? ` + ${c1}` : ''})`;
+  const discriminant = c1 ? `${c1} ^ 2 - 4 * ${c0} * ${c2}` : `-4 * ${c0} * ${c2}`;
+  const integral =
+    evaluate(discriminant, values) > 0
+      ? `(1 / sqrt(${d})) * ln(((${u(hi)} - sqrt(${d})) / (${u(hi)} + sqrt(${d}))) / ((${u(lo)} - sqrt(${d})) / (${u(lo)} + sqrt(${d}))))`
+      : `(2 / sqrt(-${d})) * (atan(${u(hi)} / sqrt(-${d})) - atan(${u(lo)} / sqrt(-${d})))`;
+  return [
+    [d, discriminant, ''],
+    [`I${sfx}`, integral, 's²/m'],
+    [name, `${log} - ${factor} * I${sfx}`, 'm'],
+  ];
+}
+
+/** The values a chain's formulas see: its givens, then its steps. */
+function valuesOf(given: Record<string, Given>, steps: readonly StepSpec[]): Record<string, number> {
+  const worked = chain('', '', given, steps);
+  return Object.fromEntries([...Object.entries(given).map(([n, g]) => [n, g.value] as const), ...worked.steps.map((s) => [s.name, s.value] as const)]);
+}
+
+/** The working behind one of the runway tab's results, or null where it has none. */
+export function runwayWorking(id: RunwayWorkingId, scenario: Scenario, runway: RunwayModel, view: ViewSettings): Working | null {
+  const aircraft: Aircraft = { ...scenario.aircraft, mass: operatingMass(scenario) };
+  const { atmosphere, headwind } = runway;
+  const surface = RUNWAY_SURFACES[runway.surface];
+  const metres = (v: number) => length(v, view.system);
+  const tas = (v: number) => `${speed(v, view.unit)} TAS`;
+  const base: Record<string, Given> = {
+    W: weightGiven(aircraft),
+    rho: { value: atmosphere.density, unit: 'kg/m³', note: conditionNote(atmosphere) },
+    S: { value: aircraft.wingArea, unit: 'm²' },
+    g_0: { value: G0, unit: 'm/s²' },
+    V_w: { value: headwind, unit: 'm/s', note: headwind === 0 ? 'calm' : headwind > 0 ? 'headwind' : 'tailwind' },
+  };
+  const groundCl = (ratio: string, ratioValue: number, clMax: number): StepSpec =>
+    surface.rolling / (2 * k(aircraft)) <= clMax / ratioValue ** 2 ? ['C_L_g', 'mu_r / (2 * k)', ''] : ['C_L_g', `C_Lmax / ${ratio} ^ 2`, ''];
+  const tailwind =
+    headwind < 0
+      ? ' In a tailwind the airspeed starts below zero, where the air pushes rather than drags and the wing lifts nothing, so that part of the run has its own a(V).'
+      : '';
+
+  if (id === 'takeoff-roll' || id === 'takeoff-total') {
+    const r = runway.takeoff;
+    if (!r.ok || !isPowered(aircraft) || headwind >= r.liftOffSpeed) return null;
+    const engine = aircraft.propulsion;
+    const jet = engine.kind === 'turbofan';
+    const clMax = aircraft.clMaxTakeoff ?? aircraft.clMax;
+    const stall: StepSpec = ['V_s', 'sqrt(2 * W / (rho * S * C_Lmax))', 'm/s', tas];
+    const common: Record<string, Given> = {
+      ...base,
+      ...polarGiven(aircraft),
+      C_Lmax: { value: clMax, unit: '', note: aircraft.clMaxTakeoff ? 'takeoff flap' : 'clean' },
+    };
+
+    if (id === 'takeoff-total') {
+      const t = thrust(aircraft, atmosphere, r.obstacleSpeed);
+      const { V: _speed, ...thrustGiven } = t.given;
+      const cleared = r.climb === 0;
+      return chain(
+        'Takeoff over 50 ft',
+        `After lift-off the aircraft pulls up at n = 1.2 on a circular arc at 1.15 V_s, onto its steepest steady climb, sin γ = (T − D)/W, then climbs straight to 50 ft${cleared ? '; here it clears 50 ft during the arc' : ''}. A headwind shortens each part by (V − V_w)/V. Raymer, §17.8.`,
+        {
+          ...common,
+          ...thrustGiven,
+          n: { value: TAKEOFF_TECHNIQUE.transitionLoadFactor, unit: '', note: 'the pull-up' },
+          h_obs: { value: OBSTACLE_HEIGHT, unit: 'm', note: '50 ft' },
+          s_G: { value: r.groundRoll, unit: 'm', note: 'the ground roll, which has its own working' },
+        },
+        [
+          stall,
+          ['V', '1.15 * V_s', 'm/s', tas],
+          ...t.steps,
+          ['k', '1 / (pi * e * AR)', ''],
+          ['C_L', '2 * W / (rho * V ^ 2 * S)', ''],
+          ['C_D', 'C_D0 + k * C_L ^ 2', ''],
+          ['D', '0.5 * rho * V ^ 2 * S * C_D', 'N'],
+          ['gamma', 'asin((T - D) / W)', 'rad', (v) => `${num(v * DEG, 2)}°`],
+          ['R', 'V ^ 2 / (g_0 * (n - 1))', 'm'],
+          ['h_TR', 'R * (1 - cos(gamma))', 'm'],
+          ...(cleared
+            ? ([['s_TR', 'sqrt(R ^ 2 - (R - h_obs) ^ 2) * (V - V_w) / V', 'm', metres]] as const)
+            : ([
+                ['s_TR', 'R * sin(gamma) * (V - V_w) / V', 'm', metres],
+                ['s_CL', '(h_obs - h_TR) / tan(gamma) * (V - V_w) / V', 'm', metres],
+              ] as const)),
+          ['s_50', cleared ? 's_G + s_TR' : 's_G + s_TR + s_CL', 'm', metres],
+        ],
+      );
+    }
+
+    if (!jet) {
+      // ponytail: no working when thrust is held to P/V anywhere on the run; it would need the run split there, with a cubic a(V).
+      const { staticThrust, zeroThrustSpeed } = engine.propeller;
+      const v = Math.min(r.liftOffSpeed, zeroThrustSpeed / 2);
+      if (r.liftOffSpeed >= zeroThrustSpeed || staticThrust * v * (1 - v / zeroThrustSpeed) > engine.power) return null;
+    }
+    const t = thrust(aircraft, atmosphere, r.liftOffSpeed);
+    const { V: _speed, ...thrustGiven } = t.given;
+    const given: Record<string, Given> = {
+      ...common,
+      ...thrustGiven,
+      mu_r: { value: surface.rolling, unit: '', note: `rolling friction, ${surface.label.toLowerCase()}` },
+      t_r: { value: TAKEOFF_TECHNIQUE.rotationTime, unit: 's', note: 'rotation' },
+    };
+    const steps: StepSpec[] = [
+      stall,
+      ['V_LOF', '1.1 * V_s', 'm/s', tas],
+      ...(jet ? t.steps : t.steps.filter(([name]) => name !== 'T')),
+      ['k', '1 / (pi * e * AR)', ''],
+      groundCl('1.1', TAKEOFF_TECHNIQUE.liftOff, clMax),
+      ['C_D_g', 'C_D0 + k * C_L_g ^ 2', ''],
+      ['a_0', jet ? '(g_0 / W) * (T - mu_r * W)' : '(g_0 / W) * (phi * T_s - mu_r * W)', 'm/s²'],
+      ...(jet ? [] : ([['a_1', '-(g_0 / W) * phi * T_s / V_0', '1/s']] as const)),
+      ['a_2', '-(g_0 / W) * 0.5 * rho * S * (C_D_g - mu_r * C_L_g)', '1/m'],
+      ...(headwind < 0 ? ([['b_2', '(g_0 / W) * 0.5 * rho * S * C_D_g', '1/m']] as const) : []),
+    ];
+    const values = valuesOf(given, steps);
+    const ahead: Quadratic = ['a_0', jet ? null : 'a_1', 'a_2'];
+    if (headwind < 0) steps.push(...runSteps('s_tail', '_t', ['a_0', null, 'b_2'], 'V_w', '0', values), ...runSteps('s_run', '', ahead, '0', 'V_LOF', values));
+    else steps.push(...runSteps('s_run', '', ahead, 'V_w', 'V_LOF', values));
+    steps.push(['s_rot', '(V_LOF - V_w) * t_r', 'm', metres], ['s_G', headwind < 0 ? 's_tail + s_run + s_rot' : 's_run + s_rot', 'm', metres]);
+    return chain(
+      'Takeoff ground roll',
+      `From brake release to lift-off at 1.1 V_s, then a second of rotation. On the run m dV/dt = T − D − μ(W − L), with the wing at the lift coefficient of least rolling resistance, μ/2k, or less if that would lift off early. ${jet ? 'Thrust is constant' : 'Thrust is a straight line in speed'}, so the acceleration is a quadratic, a(V) = a₀ + ${jet ? '' : 'a₁V + '}a₂V², and the distance ∫ (V − V_w) dV / a(V) has a closed form.${tailwind}`,
+      given,
+      steps,
+    );
+  }
+
+  const r = runway.landing;
+  if (!r.ok) return null;
+  const clMax = aircraft.clMaxFlaps ?? aircraft.clMax;
+  const common: Record<string, Given> = { ...base, C_Lmax: { value: clMax, unit: '', note: aircraft.clMaxFlaps ? 'landing flap' : 'clean' } };
+  const stall: StepSpec = ['V_s0', 'sqrt(2 * W / (rho * S * C_Lmax))', 'm/s', tas];
+
+  if (id === 'landing-total') {
+    const t = LANDING_TECHNIQUE;
+    const capped = (r.flareSpeed ** 2 / (G0 * (t.flareLoadFactor - 1))) * (1 - Math.cos(t.approachAngle)) >= OBSTACLE_HEIGHT;
+    return chain(
+      'Landing from 50 ft',
+      'A 3° approach at 1.3 V_s0 down to the flare, a circular arc at 1.23 V_s0 and n = 1.2 that levels off, then the ground roll. A headwind shortens each part in the air by (V − V_w)/V. Raymer, §17.9.',
+      {
+        ...common,
+        theta: { value: t.approachAngle, unit: 'rad', note: '3°, the approach path' },
+        n: { value: t.flareLoadFactor, unit: '', note: 'the flare' },
+        h_obs: { value: OBSTACLE_HEIGHT, unit: 'm', note: '50 ft' },
+        s_G: { value: r.groundRoll, unit: 'm', note: 'the ground roll, which has its own working' },
+      },
+      [
+        stall,
+        ['V_A', '1.3 * V_s0', 'm/s', tas],
+        ['V_F', '1.23 * V_s0', 'm/s', tas],
+        ['R', 'V_F ^ 2 / (g_0 * (n - 1))', 'm'],
+        ['h_F', capped ? 'h_obs' : 'R * (1 - cos(theta))', 'm'],
+        ['s_A', '(h_obs - h_F) / tan(theta) * (V_A - V_w) / V_A', 'm', metres],
+        ['s_F', 'R * sin(theta) * (V_F - V_w) / V_F', 'm', metres],
+        ['s_50', 's_A + s_F + s_G', 'm', metres],
+      ],
+    );
+  }
+
+  const windmill = aircraft.windmillCd0 !== undefined;
+  const given: Record<string, Given> = {
+    ...common,
+    ...polarGiven(aircraft),
+    ...(windmill ? { dC_D0: { value: aircraft.windmillCd0!, unit: '', note: 'the windmilling propeller, engine at idle' } } : {}),
+    mu_r: { value: surface.rolling, unit: '', note: `rolling friction, ${surface.label.toLowerCase()}: sets the wing’s lift coefficient` },
+    mu_b: { value: surface.braking, unit: '', note: 'braking friction' },
+    t_fr: { value: LANDING_TECHNIQUE.freeRollTime, unit: 's', note: 'free roll before the brakes' },
+  };
+  const cd0 = windmill ? 'C_D0off' : 'C_D0';
+  const steps: StepSpec[] = [
+    stall,
+    ['V_TD', '1.15 * V_s0', 'm/s', tas],
+    ['s_FR', '(V_TD - V_w) * t_fr', 'm', metres],
+    ['k', '1 / (pi * e * AR)', ''],
+    groundCl('1.15', LANDING_TECHNIQUE.touchdown, clMax),
+    ...(windmill ? ([['C_D0off', 'C_D0 + dC_D0', '']] as const) : []),
+    ['C_D_g', `${cd0} + k * C_L_g ^ 2`, ''],
+    ['a_0', 'g_0 * mu_b', 'm/s²'],
+    ['a_2', '(g_0 / W) * 0.5 * rho * S * (C_D_g - mu_b * C_L_g)', '1/m'],
+    ...(headwind < 0 ? ([['b_2', '-(g_0 / W) * 0.5 * rho * S * C_D_g', '1/m']] as const) : []),
+  ];
+  const values = valuesOf(given, steps);
+  if (headwind < 0) steps.push(...runSteps('s_tail', '_t', ['a_0', null, 'b_2'], 'V_w', '0', values), ...runSteps('s_B', '', ['a_0', null, 'a_2'], '0', 'V_TD', values));
+  else steps.push(...runSteps('s_B', '', ['a_0', null, 'a_2'], 'V_w', 'V_TD', values));
+  steps.push(['s_G', headwind < 0 ? 's_FR + s_tail + s_B' : 's_FR + s_B', 'm', metres]);
+  return chain(
+    'Landing ground roll',
+    `A second of free roll at touchdown, 1.15 V_s0, then full braking with the engine at idle: m dV/dt = −D − μ_b(W − L). Without thrust the deceleration is a(V) = a₀ + a₂V², and the distance ∫ (V − V_w) dV / a(V) is a logarithm, with an arctangent or a second logarithm when there is wind.${tailwind}`,
+    given,
+    steps,
   );
 }

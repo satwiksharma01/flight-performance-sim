@@ -446,7 +446,7 @@ export function App() {
                 <SensitivityTab model={sensitivity} comparing={state.compare !== undefined} />
               )}
               {view.tab === 'field' && runway && (
-                <RunwayTab runway={runway} view={view} theme={theme} onAltitude={setAltitudeFt} />
+                <RunwayTab runway={runway} scenario={scenario} view={view} theme={theme} onAltitude={setAltitudeFt} />
               )}
               {view.tab === 'curves' && (
               <>

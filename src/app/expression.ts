@@ -18,6 +18,8 @@ const FUNCTIONS = {
   atan: Math.atan,
   cos: Math.cos,
   sin: Math.sin,
+  tan: Math.tan,
+  asin: Math.asin,
 } as const;
 type Fn = keyof typeof FUNCTIONS;
 
