@@ -73,8 +73,8 @@ implementations, DO-178C). It is a far stronger engineering story than
 **When a backend earns its place (later):** mission-profile numerical integration, Ps
 sweeps over 200×200 grids, trajectory optimization. Real compute. Not before.
 
-The physics core having zero dependencies is deliberate — it can ship as a standalone
-npm package, which is a second portfolio artifact for free.
+The physics core has zero dependencies, so it could ship as a standalone package. It
+isn't published: the owner keeps all rights to the code (see v1.0).
 
 ---
 
@@ -416,7 +416,8 @@ curve move. A complete product at a tiny scope.
       *Every chart. The PNG is the chart's canvas at the screen's pixel density, with
       its title, a key and the scenario's link; the CSV is what it plots, in the axes'
       units, six figures, the comparison aircraft merged on x, contours as points*
-- [ ] Publish `physics/` as a standalone npm package
+- ~~Publish `physics/` as a standalone npm package~~ *Dropped 2026-10-21. A package
+      exists to be reused, and the owner keeps all rights to the code*
 
 ### Later — genuine backend territory
 Mission-profile integration, envelope optimization, trajectory solving, Mach and
@@ -446,7 +447,7 @@ Ranked by contribution:
 3. Dual-implementation cross-validation (TS + Python to 1e-9).
 4. EAS/CAS/TAS correctness and density altitude — domain fluency.
 5. V-n diagram — instantly recognisable, cheap to build.
-6. Zero-dependency physics core, publishable as its own package.
+6. Zero-dependency physics core.
 7. Instant, permalinked, always online, because there is no backend to die.
 
 The README should lead with a GIF of a slider moving and curves responding, then the

@@ -239,7 +239,7 @@ npm run build        # static site in dist/, relative paths, any host
 | `src/data/validation/` | The validation dataset, the POH tables, and the cross-check's last run |
 | `src/app/components/` | React controls, readouts, and the uPlot chart with its marker overlays |
 
-434 tests, covering the published ISA table at five altitudes, layer continuity,
+468 tests, covering the published ISA table at five altitudes, layer continuity,
 profile inversion, every closed-form optimum cross-checked against a brute-force
 scan, permalink round-trip stability, and the chart model's physics: the drag curve
 is identical against EAS at every altitude and slides right by `sqrt(ρ₀/ρ)` against
@@ -337,3 +337,8 @@ a fixed-pitch propeller does.
 
 Aircraft parameters in `src/data/aircraft/` are simplified representative figures for
 education, not certification data.
+
+## License
+
+© 2026 Satwik Sharma. All rights reserved. The source is public to read; no license is
+granted to reuse it.
