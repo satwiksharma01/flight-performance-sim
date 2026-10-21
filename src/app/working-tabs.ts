@@ -13,15 +13,19 @@
  *
  * So the working is also a second, analytic check on the numerical
  * integration, and tests/working.test.ts holds them together.
+ *
+ * The envelope tab's results are closed forms already: V_A, the gust load,
+ * the corner, a level turn, and P_s at the selected point.
  */
 
-import { CRUISE_PROPELLER_EFFICIENCY, G0, isPowered, type Aircraft } from '../physics/index.js';
+import { CRUISE_PROPELLER_EFFICIENCY, G0, RHO0, isPowered, type Aircraft } from '../physics/index.js';
 import type { CruiseCase } from '../physics/performance/range.js';
 import { CRUISE_RESERVE, toDistance, type CruiseModel } from './cruise.js';
-import { num } from './format.js';
+import type { EnvelopeModel } from './envelope.js';
+import { length, num, speed } from './format.js';
 import type { ViewSettings } from './model.js';
-import { chain, conditionNote, polarGiven, tasShown, type Given, type StepSpec, type Working } from './working.js';
-import { cruisePowerOf, operatingMass, type Scenario } from '../state/url.js';
+import { chain, conditionNote, polarGiven, tasShown, thrust, weightGiven, type Given, type StepSpec, type Working } from './working.js';
+import { cruisePowerOf, loadFactorOf, operatingMass, type Scenario } from '../state/url.js';
 
 export type RangeWorkingId = 'range' | 'endurance' | 'set-power';
 
@@ -164,4 +168,103 @@ function setPowerWorking(aircraft: Aircraft, scenario: Scenario, cruise: CruiseM
 export function rangeWorking(id: RangeWorkingId, scenario: Scenario, cruise: CruiseModel, view: ViewSettings): Working | null {
   const aircraft: Aircraft = { ...scenario.aircraft, mass: operatingMass(scenario) };
   return id === 'set-power' ? setPowerWorking(aircraft, scenario, cruise, view) : breguetWorking(id, aircraft, cruise, view);
+}
+
+// --- The envelope tab ------------------------------------------------------------
+
+export type EnvelopeWorkingId = 'maneuvering' | 'gust' | 'corner' | 'turn' | 'excess-power';
+
+const DEG = 180 / Math.PI;
+const FPM = 60 / 0.3048;
+
+/** The working behind one of the envelope tab's results, or null where it has none. */
+export function envelopeWorking(id: EnvelopeWorkingId, scenario: Scenario, envelope: EnvelopeModel, view: ViewSettings): Working | null {
+  const aircraft: Aircraft = { ...scenario.aircraft, mass: operatingMass(scenario) };
+  const { atmosphere } = envelope;
+  const W = weightGiven(aircraft);
+  const g_0: Given = { value: G0, unit: 'm/s²' };
+  const rho: Given = { value: atmosphere.density, unit: 'kg/m³', note: conditionNote(atmosphere) };
+  const eas = (v: number) => `${speed(v, view.unit)} EAS`;
+  const turn = (V: string): StepSpec[] => [
+    ['omega', `g_0 * sqrt(n ^ 2 - 1) / ${V}`, 'rad/s', (v) => `${num(v * DEG, 1)} °/s`],
+    ['R', `${V} ^ 2 / (g_0 * sqrt(n ^ 2 - 1))`, 'm', (v) => length(v, view.system)],
+  ];
+
+  if (id === 'maneuvering' || id === 'gust') {
+    const vn = envelope.vn;
+    if (!vn) return null;
+    const { limits } = vn.diagram;
+    if (id === 'maneuvering') {
+      return chain(
+        'Manoeuvring speed',
+        'Below this speed the wing stalls before the structure reaches its limit load. In equivalent airspeed the stall curve, n = ½ ρ₀ V² S CLmax / W, is the same at every altitude, so the speed where it reaches the limit is the stall speed times √n.',
+        { W, rho_0: { value: RHO0, unit: 'kg/m³', note: 'sea level: these speeds are EAS' }, S: { value: aircraft.wingArea, unit: 'm²' }, C_Lmax: { value: aircraft.clMax, unit: '', note: 'flaps up' }, n_max: { value: limits.nPositive, unit: '', note: 'the positive limit load factor' } },
+        [
+          ['V_S', 'sqrt(2 * W / (rho_0 * S * C_Lmax))', 'm/s', eas],
+          ['V_A', 'V_S * sqrt(n_max)', 'm/s', eas],
+        ],
+      );
+    }
+    const gustNote = vn.diagram.gusts.cruise < 50 * 0.3048 ? '50 ft/s, scaled down above 20,000 ft' : '50 ft/s';
+    return chain(
+      'Gust load factor',
+      'At the design cruising speed. A sharp-edged vertical gust U changes the angle of attack by U/V, and so the lift. The Pratt formula (former 14 CFR 23.341) eases that by an alleviation factor, for the time the wing takes to fly into the gust, which depends on its mass ratio μ.',
+      {
+        W,
+        S: { value: aircraft.wingArea, unit: 'm²' },
+        AR: { value: aircraft.aspectRatio, unit: '' },
+        rho,
+        rho_0: { value: RHO0, unit: 'kg/m³' },
+        g_0,
+        U_de: { value: vn.diagram.gusts.cruise, unit: 'm/s', note: `the design gust, EAS: ${gustNote}` },
+        V_C: { value: limits.cruiseSpeed, unit: 'm/s', note: `design cruising speed, ${eas(limits.cruiseSpeed)}` },
+      },
+      [
+        ['a', '2 * pi * AR / (2 + sqrt(4 + AR ^ 2 / 0.95 ^ 2))', '1/rad'],
+        ['c', 'sqrt(S / AR)', 'm'],
+        ['mu', '2 * (W / S) / (rho * c * a * g_0)', ''],
+        ['K_g', '0.88 * mu / (5.3 + mu)', ''],
+        ['dn', 'K_g * rho_0 * U_de * V_C * a / (2 * W / S)', ''],
+        ['n', '1 + dn', ''],
+      ],
+    );
+  }
+
+  if (id === 'corner') {
+    const n = envelope.turn.nStructure;
+    if (n === null || !envelope.turn.corner) return null;
+    return chain(
+      'Corner speed',
+      'The slowest speed at which the wing can pull the structural limit: where the stall meets it. Turn rate peaks here and radius is at its least.',
+      { W, rho, S: { value: aircraft.wingArea, unit: 'm²' }, C_Lmax: { value: aircraft.clMax, unit: '' }, n: { value: n, unit: '', note: 'the positive limit load factor' }, g_0 },
+      [['V_corner', 'sqrt(2 * n * W / (rho * S * C_Lmax))', 'm/s', tasShown(atmosphere, view)], ...turn('V_corner')],
+    );
+  }
+
+  if (id === 'turn') {
+    const n = loadFactorOf(scenario);
+    if (n <= 1) return null;
+    return chain(
+      'This turn',
+      'In a level turn the lift tilts with the bank, its vertical part still carrying the weight, so n = 1/cos φ; its horizontal part, W √(n² − 1), turns the aircraft.',
+      { phi: { value: Math.acos(1 / n), unit: 'rad', note: `${num(Math.acos(1 / n) * DEG, 1)}° of bank` }, V: { value: scenario.tas, unit: 'm/s', note: tasShown(atmosphere, view)(scenario.tas) }, g_0 },
+      [['n', '1 / cos(phi)', ''], ...turn('V')],
+    );
+  }
+
+  if (!envelope.energy || envelope.energy.selected === null || !isPowered(aircraft)) return null;
+  const t = thrust(aircraft, atmosphere, scenario.tas);
+  return chain(
+    'Specific excess power',
+    'The rate full power can add to the energy height h + V²/2g: the climb rate at this speed, or g Pₛ / V of acceleration in level flight. Drag is taken at L = nW.',
+    { W, ...t.given, V: { value: scenario.tas, unit: 'm/s', note: tasShown(atmosphere, view)(scenario.tas) }, n: { value: loadFactorOf(scenario), unit: '', note: loadFactorOf(scenario) > 1 ? `1/cos φ, at ${num(Math.acos(1 / loadFactorOf(scenario)) * DEG)}° of bank` : 'wings level' }, ...polarGiven(aircraft) },
+    [
+      ...t.steps,
+      ['k', '1 / (pi * e * AR)', ''],
+      ['C_L', '2 * n * W / (rho * V ^ 2 * S)', ''],
+      ['C_D', 'C_D0 + k * C_L ^ 2', ''],
+      ['D', '0.5 * rho * V ^ 2 * S * C_D', 'N'],
+      ['P_s', 'V * (T - D) / W', 'm/s', (v) => `${num(v * FPM)} ft/min`],
+    ],
+  );
 }

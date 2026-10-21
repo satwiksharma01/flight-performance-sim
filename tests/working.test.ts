@@ -1,16 +1,29 @@
 import { describe, expect, it } from 'vitest';
 import { evaluate } from '../src/app/expression.js';
+import { figure } from '../src/app/components/Working.js';
 import { rounded, result, tileWorking, type TileId, type Working } from '../src/app/working.js';
 import { DEFAULT_VIEW, buildChartModel, type ViewSettings } from '../src/app/model.js';
 import { DEFAULT_SCENARIO, type Scenario } from '../src/state/url.js';
 import { PRESETS } from '../src/data/aircraft/presets.js';
 import { SERVICE_CEILING_RATE } from '../src/physics/performance/climb.js';
 import { buildCruiseModel } from '../src/app/cruise.js';
-import { rangeWorking } from '../src/app/working-tabs.js';
+import { envelopeWorking, rangeWorking } from '../src/app/working-tabs.js';
+import { buildEnvelopeModel } from '../src/app/envelope.js';
+import { vnBoundaries } from '../src/physics/performance/vn.js';
 import type { PistonEngine } from '../src/physics/propulsion.js';
 
 const FPM = 60 / 0.3048;
 const view: ViewSettings = { ...DEFAULT_VIEW, axis: 'eas' };
+
+describe('figure', () => {
+  it('shows six figures, and powers of ten below 0.001', () => {
+    expect(figure(1234.5678)).toBe('1,234.57');
+    expect(figure(0)).toBe('0');
+    expect(figure(0.00105838)).toBe('0.00105838');
+    expect(figure(6.65623e-8)).toBe('6.65623 × 10⁻⁸');
+    expect(figure(-2.004371e-6)).toBe('-2.00437 × 10⁻⁶');
+  });
+});
 
 describe('expression', () => {
   it('follows the usual precedence, with right-associative powers', () => {
@@ -143,6 +156,55 @@ describe('the working behind the range tab', () => {
     });
     for (const marker of ['ln(mdot_0 / mdot_1)', 'atan(sqrt(W_0) / q)', 'F_0 - F_1', 'sqrt(W_0) - sqrt(W_1)', 'W_1 ^ -0.5']) {
       expect(formulas.some((f) => f.includes(marker)), marker).toBe(true);
+    }
+  });
+});
+
+describe('the working behind the envelope tab', () => {
+  const envelopeView: ViewSettings = { ...DEFAULT_VIEW, tab: 'envelope' };
+  const DEG = 180 / Math.PI;
+  for (const [label, scenario] of SCENARIOS) {
+    it(`lands on each result the tab shows: ${label}`, () => {
+      const envelope = buildEnvelopeModel(scenario, envelopeView);
+      const work = (id: Parameters<typeof envelopeWorking>[0]) => envelopeWorking(id, scenario, envelope, envelopeView);
+      const all = (['maneuvering', 'gust', 'corner', 'turn', 'excess-power'] as const).map(work);
+
+      const { vn, turn, energy } = envelope;
+      if (vn) {
+        expect(step(all[0]!, 'V_S') / vn.diagram.stallSpeed).toBeCloseTo(1, 12);
+        expect(result(all[0]!) / vn.diagram.maneuveringSpeed).toBeCloseTo(1, 12);
+        expect(step(all[1]!, 'a') / vn.diagram.alleviation.liftSlope).toBeCloseTo(1, 12);
+        expect(step(all[1]!, 'K_g') / vn.diagram.alleviation.factor).toBeCloseTo(1, 12);
+        expect(result(all[1]!) / vnBoundaries(vn.diagram, vn.diagram.limits.cruiseSpeed)!.gust.upper).toBeCloseTo(1, 12);
+      } else expect(all[0]).toBeNull();
+      if (turn.corner) {
+        expect((step(all[2]!, 'omega') * DEG) / turn.corner.rate).toBeCloseTo(1, 12);
+        expect(result(all[2]!) / turn.corner.radius).toBeCloseTo(1, 12);
+      } else expect(all[2]).toBeNull();
+      if (turn.selected.radius !== null) {
+        expect(step(all[3]!, 'n') / (scenario.loadFactor ?? 1)).toBeCloseTo(1, 12);
+        expect((step(all[3]!, 'omega') * DEG) / turn.selected.rate).toBeCloseTo(1, 12);
+        expect(result(all[3]!) / turn.selected.radius).toBeCloseTo(1, 12);
+      } else expect(all[3]).toBeNull();
+      if (energy?.selected != null) expect((result(all[4]!) * FPM) / energy.selected).toBeCloseTo(1, 10);
+      else expect(all[4]).toBeNull();
+
+      for (const w of all) {
+        if (!w) continue;
+        const screen = fromScreen(w);
+        w.steps.forEach((s, i) => {
+          // P_s is thrust less drag, which cancels near the envelope's edge: compare it on the scale of V T / W.
+          const scale = s.name === 'P_s' ? (step(w, 'T') * w.given.V!.value) / w.given.W!.value : Math.abs(s.value);
+          expect(Math.abs(screen[i]! - s.value) / scale, `${w.title}: ${s.name}`).toBeLessThan(1e-4);
+        });
+      }
+    });
+  }
+
+  it('has a scenario for every working', () => {
+    for (const id of ['maneuvering', 'gust', 'corner', 'turn', 'excess-power'] as const) {
+      const shown = SCENARIOS.some(([, scenario]) => envelopeWorking(id, scenario, buildEnvelopeModel(scenario, envelopeView), envelopeView));
+      expect(shown, id).toBe(true);
     }
   });
 });

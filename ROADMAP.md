@@ -399,8 +399,10 @@ curve move. A complete product at a tiny scope.
       the ceiling, V_max, minimum sink) show the condition solved. Range tab done:
       best range and endurance as Breguet in closed form with the fuel line's base
       flow (atan and log terms), equal to the numerical Simpson integration to 1e-9,
-      and the set-power cruise as its power balance, fuel flow and time. The envelope
-      and runway tabs next*
+      and the set-power cruise as its power balance, fuel flow and time. Envelope tab
+      done: V_A as V_S √n in EAS, the Pratt gust load with its mass ratio and
+      alleviation factor, the corner speed, this turn from its bank, and P_s at the
+      selected point. The runway tab next*
 - [ ] Export chart as PNG / data as CSV
 - [ ] Publish `physics/` as a standalone npm package
 

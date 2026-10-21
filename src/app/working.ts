@@ -141,7 +141,7 @@ function densityAltitudeWorking(atmosphere: AtmosphereState): Working | null {
 // --- Thrust, climb and level flight ------------------------------------------
 
 /** Full-throttle thrust at this speed: the lapse, then the engine's thrust law. */
-function thrust(aircraft: PoweredAircraft, atmosphere: AtmosphereState, tas: number): { given: Record<string, Given>; steps: StepSpec[] } {
+export function thrust(aircraft: PoweredAircraft, atmosphere: AtmosphereState, tas: number): { given: Record<string, Given>; steps: StepSpec[] } {
   const engine = aircraft.propulsion;
   const given: Record<string, Given> = { rho: { value: atmosphere.density, unit: 'kg/m³', note: conditionNote(atmosphere) } };
   const steps: StepSpec[] = [];

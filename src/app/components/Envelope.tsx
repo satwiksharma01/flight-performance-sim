@@ -1,12 +1,16 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { G0 } from '../../physics/index.js';
 import { bankForLoadFactor } from '../../physics/performance/turn.js';
 import type { EnvelopeModel } from '../envelope.js';
 import { SYSTEM_UNITS, toUnit, type ChartModel, type ViewSettings } from '../model.js';
 import { axisLabel, axisTick, length, num, tick } from '../format.js';
 import { Chart, type ChartPath } from './Chart.js';
+import { ShowWorking, WorkingCard } from './Working.js';
+import { envelopeWorking, type EnvelopeWorkingId } from '../working-tabs.js';
+import type { Scenario } from '../../state/url.js';
 
 const FT = 0.3048;
+const WORKING_ID = 'envelope-working';
 const unitLabel = (view: ViewSettings) => (view.unit === 'mps' ? 'm/s' : view.unit === 'kmh' ? 'km/h' : 'kt');
 
 function V({ sub }: { sub: string }) {
@@ -19,6 +23,7 @@ function V({ sub }: { sub: string }) {
 
 interface Props {
   readonly envelope: EnvelopeModel;
+  readonly scenario: Scenario;
   readonly model: ChartModel;
   readonly view: ViewSettings;
   readonly theme: string;
@@ -30,8 +35,13 @@ interface Props {
   readonly onEnergyPick: (x: number, altitudeFt: number) => void;
 }
 
-export function EnvelopeTab({ envelope, model, view, theme, onVnPick, onTurnPick, onEnergyPick }: Props) {
+export function EnvelopeTab({ envelope, scenario, model, view, theme, onVnPick, onTurnPick, onEnergyPick }: Props) {
   const { vn, turn, energy } = envelope;
+  const [open, setOpen] = useState<EnvelopeWorkingId | null>(null);
+  const working = open ? envelopeWorking(open, scenario, envelope, view) : null;
+  const show = (id: EnvelopeWorkingId) => (
+    <ShowWorking open={open === id} onToggle={() => setOpen(open === id ? null : id)} controls={WORKING_ID} />
+  );
   const n = model.loadFactor;
   const lengthUnit = SYSTEM_UNITS[view.system].length;
 
@@ -180,7 +190,11 @@ export function EnvelopeTab({ envelope, model, view, theme, onVnPick, onTurnPick
             <p className="card-sub">Equivalent airspeed, at this weight. Gusts at this altitude.</p>
             <dl className="readout">
               <Row label={<>Stall, <V sub="S" /></>} value={`${num(vn.speeds.stall)} ${unitLabel(view)}`} />
-              <Row label={<>Manoeuvring, <V sub="A" /></>} value={`${num(vn.speeds.maneuvering)} ${unitLabel(view)}`} dim={`at n = ${num(vn.diagram.limits.nPositive, 1)}`} />
+              <Row
+                label={<>Manoeuvring, <V sub="A" /></>}
+                value={`${num(vn.speeds.maneuvering)} ${unitLabel(view)}`}
+                dim={<>at n = {num(vn.diagram.limits.nPositive, 1)} {show('maneuvering')}</>}
+              />
               <Row label={<>Design cruise, <V sub="C" /></>} value={`${num(vn.speeds.cruise)} ${unitLabel(view)}`} />
               <Row label={<>Never exceed, <V sub="NE" /></>} value={`${num(vn.speeds.neverExceed)} ${unitLabel(view)}`} dim={<>0.9 <V sub="D" /></>} />
               <Row label={<>Design dive, <V sub="D" /></>} value={`${num(vn.speeds.dive)} ${unitLabel(view)}`} />
@@ -193,7 +207,7 @@ export function EnvelopeTab({ envelope, model, view, theme, onVnPick, onTurnPick
               <Row
                 label="Gust alleviation"
                 value={<>K<sub>g</sub> {num(vn.diagram.alleviation.factor, 3)}</>}
-                dim={`μ ${num(vn.diagram.alleviation.massRatio, 1)}, a ${num(vn.diagram.alleviation.liftSlope, 2)}/rad`}
+                dim={<>μ {num(vn.diagram.alleviation.massRatio, 1)}, a {num(vn.diagram.alleviation.liftSlope, 2)}/rad {show('gust')}</>}
               />
               <Row
                 label="This point"
@@ -213,7 +227,7 @@ export function EnvelopeTab({ envelope, model, view, theme, onVnPick, onTurnPick
               <Row
                 label="Corner speed"
                 value={axisTick(turn.corner.x, view) + (view.axis === 'mach' ? '' : ` ${unitLabel(view)}`)}
-                dim={`${num(turn.corner.rate, 1)} °/s, R ${length(turn.corner.radius, view.system)}`}
+                dim={<>{num(turn.corner.rate, 1)} °/s, R {length(turn.corner.radius, view.system)} {show('corner')}</>}
               />
             )}
             {turn.nStructure === null && <Row label="Structural limit" value="none set" dim="the wing alone bounds the turn" />}
@@ -229,7 +243,7 @@ export function EnvelopeTab({ envelope, model, view, theme, onVnPick, onTurnPick
             <Row
               label="This turn"
               value={turn.selected.radius === null ? 'wings level' : `${num(turn.selected.rate, 1)} °/s`}
-              dim={turn.selected.radius === null ? '' : `n ${num(n, 2)}, R ${length(turn.selected.radius, view.system)}`}
+              dim={turn.selected.radius === null ? '' : <>n {num(n, 2)}, R {length(turn.selected.radius, view.system)} {show('turn')}</>}
             />
           </dl>
         </section>
@@ -242,6 +256,7 @@ export function EnvelopeTab({ envelope, model, view, theme, onVnPick, onTurnPick
               <Row
                 label="Pₛ here"
                 value={energy.selected === null ? 'outside the model' : `${num(energy.selected)} ft/min`}
+                dim={energy.selected !== null && show('excess-power')}
                 caution={energy.selected !== null && energy.selected < 0}
               />
               {energy.selected !== null && (
@@ -257,6 +272,7 @@ export function EnvelopeTab({ envelope, model, view, theme, onVnPick, onTurnPick
           </section>
         )}
       </div>
+      {working && <WorkingCard id={WORKING_ID} working={working} onClose={() => setOpen(null)} />}
     </>
   );
 }

@@ -1214,6 +1214,8 @@ section[id] {
 .working {
   padding: 14px 16px;
   display: grid;
+  /* minmax(0, …) so a long equation scrolls in its line instead of widening the card */
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
   min-width: 0;
 }
@@ -1234,6 +1236,7 @@ section[id] {
   margin: 0;
   padding-left: 22px;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
 }
 

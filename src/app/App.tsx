@@ -432,6 +432,7 @@ export function App() {
               {view.tab === 'envelope' && envelope && (
                 <EnvelopeTab
                   envelope={envelope}
+                  scenario={scenario}
                   model={model}
                   view={view}
                   theme={theme}

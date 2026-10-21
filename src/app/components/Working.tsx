@@ -2,13 +2,14 @@ import { Fragment, type ReactNode } from 'react';
 import { tokenize, type Token } from '../expression.js';
 import { FIGURES, rounded, type Working } from '../working.js';
 
-const GREEK: Record<string, string> = { rho: 'ρ', gamma: 'γ', sigma: 'σ', phi: 'φ', pi: 'π', eta: 'η', mdot: 'ṁ' };
+const GREEK: Record<string, string> = { rho: 'ρ', gamma: 'γ', sigma: 'σ', phi: 'φ', pi: 'π', eta: 'η', mdot: 'ṁ', mu: 'μ', omega: 'ω' };
 
 const NAMED: Record<string, ReactNode> = {
   sin_gamma: 'sin γ',
   T_minus_D: 'T − D',
   eta_P_minus_D_V: 'η P − D V',
   RoC: 'RoC',
+  dn: 'Δn',
   C_D0off: (
     <>
       C<sub>D0, off</sub>
@@ -37,9 +38,19 @@ export function Symbol({ name }: { name: string }) {
   );
 }
 
-/** A number as the working shows it, to six figures. */
+/** Names that spell out their own formula, so the working writes it once. */
+const SELF = new Set(['T_minus_D', 'eta_P_minus_D_V']);
+
+const SUPERSCRIPT = '⁰¹²³⁴⁵⁶⁷⁸⁹';
+
+/** A number as the working shows it, to six figures; below 0.001 in powers of ten. */
 export function figure(value: number): string {
-  return rounded(value).toLocaleString('en-US', { maximumSignificantDigits: FIGURES });
+  const r = rounded(value);
+  if (r !== 0 && Math.abs(r) < 1e-3) {
+    const [mantissa = '', exponent = ''] = r.toExponential(FIGURES - 1).split('e');
+    return `${Number(mantissa)} × 10${exponent.replace('-', '⁻').replace(/\d/g, (d) => SUPERSCRIPT[Number(d)]!)}`;
+  }
+  return r.toLocaleString('en-US', { maximumSignificantDigits: FIGURES });
 }
 
 const FUNCTION_TEXT: Record<string, string> = { sqrt: '√', atan: 'tan⁻¹', ln: 'ln', cos: 'cos', sin: 'sin' };
@@ -133,7 +144,12 @@ export function WorkingCard({ working, onClose, id = 'working' }: { working: Wor
           return (
             <li key={s.name}>
               <div className="eq">
-                <Symbol name={s.name} /> = {render(tokens)}
+                {!SELF.has(s.name) && (
+                  <>
+                    <Symbol name={s.name} /> ={' '}
+                  </>
+                )}
+                {render(tokens)}
               </div>
               <div className="eq eq-numbers">= {render(tokens, values)}</div>
               <div className="eq">
