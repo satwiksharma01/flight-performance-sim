@@ -521,6 +521,27 @@ input[type='range'] {
   font-weight: 650;
 }
 
+.chart-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.chart-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+  font-size: 12px;
+}
+
+/* A 24 px target, the WCAG minimum, without growing the header */
+.chart-actions .link-button {
+  min-width: 24px;
+  min-height: 24px;
+  margin: -3px 0;
+}
+
 .chart figcaption p {
   font-size: 12.5px;
   color: var(--ink-2);

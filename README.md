@@ -101,6 +101,9 @@ cross-check on every push, and deploys to GitHub Pages when they pass. See [ROAD
   the manoeuvring speed, the gust load (Pratt), the corner, this turn and Pₛ; the
   runway tab each distance, its ground runs in closed form. The working is computed
   from the formulas it shows, and the tests check it lands on the result.
+- **Every chart exports.** PNG: the chart with its title, a key and the scenario's
+  link. CSV: the plotted data in the axes' units, the comparison aircraft merged in,
+  contours as points.
 - **Every scenario is a link.** `?ac=c172&h=2438.4&disa=15` is a Cessna at
   8,000 ft on an ISA +15 day. An edited preset stays short: `?ac=c172&cd0=0.03`.
 
@@ -229,6 +232,7 @@ npm run build        # static site in dist/, relative paths, any host
 | `src/app/model.ts` | Everything the charts draw, as pure functions: axis conversions, the fixed chart window, sampled curves |
 | `src/app/permalink.ts` | View settings in the URL, and delta encoding for edited presets |
 | `src/app/envelope.ts`, `runway.ts`, `cruise.ts`, `contour.ts` | The envelope, takeoff and range tabs' models, and marching-squares contours |
+| `src/app/chart-export.ts` | A chart's data as CSV and its picture as PNG |
 | `src/app/compare.ts` | The second aircraft: same condition, same MTOW fraction, and the side-by-side table |
 | `src/app/sensitivity.ts` | Elasticities by central difference, ranked, with a templated sentence |
 | `src/app/working.ts`, `working-tabs.ts`, `expression.ts` | The working behind each tile and the range, envelope and runway tabs: formulas in a small expression language, evaluated and drawn from one parse |

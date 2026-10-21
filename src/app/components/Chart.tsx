@@ -18,6 +18,7 @@
 import { useEffect, useRef } from 'react';
 import uPlot from 'uplot';
 import 'uplot/dist/uPlot.min.css';
+import { chartPng, download, downloadCsv, fileName } from '../chart-export.js';
 
 export interface ChartSeries {
   readonly label: string;
@@ -579,6 +580,24 @@ export function Chart(props: ChartProps) {
     };
   }, [structure]);
 
+  async function savePng() {
+    const u = plot.current;
+    if (!u) return;
+    const p = latest.current;
+    const shown = allSeries(p);
+    const theme = readTheme(shown, []);
+    const blob = await chartPng({
+      canvas: u.ctx.canvas,
+      ratio: uPlot.pxRatio,
+      title: p.title,
+      key: shown.flatMap((s, i) => (s.faint ? [] : [{ label: s.label, color: theme.series[i] ?? theme.ink, dash: s.dash, points: s.pointsOnly }])),
+      footer: `Flight Performance Simulator · ${location.href}`,
+      font: FONT_FAMILY,
+      colors: { surface: theme.surface, ink: theme.ink, muted: theme.muted },
+    });
+    if (blob) download(blob, fileName(p.title, 'png'));
+  }
+
   // Every render: new data, same instance.
   useEffect(() => {
     const u = plot.current;
@@ -593,7 +612,22 @@ export function Chart(props: ChartProps) {
   return (
     <figure className={props.wide ? 'card chart chart--wide' : 'card chart'}>
       <figcaption>
-        <h3>{props.title}</h3>
+        <div className="chart-head">
+          <h3>{props.title}</h3>
+          <span className="chart-actions">
+            <button type="button" className="link-button" onClick={savePng} aria-label={`Download ${props.title} as a PNG image`}>
+              PNG
+            </button>
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => downloadCsv(latest.current, latest.current.title)}
+              aria-label={`Download ${props.title} data as CSV`}
+            >
+              CSV
+            </button>
+          </span>
+        </div>
         <p>{props.description}</p>
       </figcaption>
       <div className="chart-host" ref={host} role="img" aria-label={`${props.title}. ${props.description}`} />

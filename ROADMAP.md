@@ -412,7 +412,10 @@ curve move. A complete product at a tiny scope.
       arcs. A ground run with thrust held to P/V on it has no closed form and no
       button. The sensitivity tab's elasticities are central differences, described
       on the tab, and have no working*
-- [ ] Export chart as PNG / data as CSV
+- [x] Export chart as PNG / data as CSV
+      *Every chart. The PNG is the chart's canvas at the screen's pixel density, with
+      its title, a key and the scenario's link; the CSV is what it plots, in the axes'
+      units, six figures, the comparison aircraft merged on x, contours as points*
 - [ ] Publish `physics/` as a standalone npm package
 
 ### Later — genuine backend territory
