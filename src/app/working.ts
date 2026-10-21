@@ -60,10 +60,10 @@ export interface Working {
   readonly steps: readonly Step[];
 }
 
-type StepSpec = readonly [name: string, formula: string, unit: string, shown?: (value: number) => string];
+export type StepSpec = readonly [name: string, formula: string, unit: string, shown?: (value: number) => string];
 
 /** Evaluate the steps in order, each able to use the givens and every step before it. */
-function chain(title: string, intro: string, given: Record<string, Given>, specs: readonly StepSpec[]): Working {
+export function chain(title: string, intro: string, given: Record<string, Given>, specs: readonly StepSpec[]): Working {
   const values: Record<string, number> = Object.fromEntries(Object.entries(given).map(([k, g]) => [k, g.value]));
   const steps = specs.map(([name, formula, unit, shown]): Step => {
     const value = evaluate(formula, values);
@@ -87,14 +87,14 @@ export function result(working: Working): number {
 const FT = 0.3048;
 const FPM = 60 / FT;
 
-const tasShown = (atmosphere: AtmosphereState, view: ViewSettings) => (tas: number) => {
+export const tasShown = (atmosphere: AtmosphereState, view: ViewSettings) => (tas: number) => {
   const speeds = airspeeds(tas, atmosphere.pressure, atmosphere.density, atmosphere.speedOfSound);
   return view.axis === 'tas' ? axisSpeed(speeds, view) : `${num(tas / (1852 / 3600))} kt TAS, shown as ${axisSpeed(speeds, view)}`;
 };
 
-const weightGiven = (aircraft: Aircraft): Given => ({ value: aircraft.mass * G0, unit: 'N', note: `${num(aircraft.mass, 1)} kg × g₀` });
+export const weightGiven = (aircraft: Aircraft): Given => ({ value: aircraft.mass * G0, unit: 'N', note: `${num(aircraft.mass, 1)} kg × g₀` });
 
-const conditionNote = (atmosphere: AtmosphereState) =>
+export const conditionNote = (atmosphere: AtmosphereState) =>
   `at ${feet(atmosphere.pressureAltitude)}, ISA ${atmosphere.deltaISA >= 0 ? '+' : '−'}${num(Math.abs(atmosphere.deltaISA))}`;
 
 // --- Density altitude -------------------------------------------------------
@@ -178,7 +178,7 @@ function thrust(aircraft: PoweredAircraft, atmosphere: AtmosphereState, tas: num
   return { given, steps };
 }
 
-function polarGiven(aircraft: Aircraft): Record<string, Given> {
+export function polarGiven(aircraft: Aircraft): Record<string, Given> {
   return {
     S: { value: aircraft.wingArea, unit: 'm²' },
     e: { value: aircraft.oswaldEfficiency, unit: '' },

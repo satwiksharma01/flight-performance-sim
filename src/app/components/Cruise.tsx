@@ -1,21 +1,32 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { CRUISE_PROPELLER_EFFICIENCY, tasToCas, type CruiseCase } from '../../physics/index.js';
 import type { CruiseModel } from '../cruise.js';
 import { SYSTEM_UNITS, toMass, type ViewSettings } from '../model.js';
 import { toDistance } from '../cruise.js';
 import { mass, num, speed, tick } from '../format.js';
 import { Chart } from './Chart.js';
+import { ShowWorking, WorkingCard } from './Working.js';
+import { rangeWorking, type RangeWorkingId } from '../working-tabs.js';
+import type { Scenario } from '../../state/url.js';
 
 interface Props {
   readonly cruise: CruiseModel;
+  readonly scenario: Scenario;
   readonly view: ViewSettings;
   readonly theme: string;
 }
 
+const WORKING_ID = 'range-working';
+
 const distanceUnit = (view: ViewSettings) => (view.unit === 'kt' ? 'NM' : 'km');
 
-export function CruiseTab({ cruise, view, theme }: Props) {
+export function CruiseTab({ cruise, scenario, view, theme }: Props) {
   const { result, chart, atmosphere } = cruise;
+  const [open, setOpen] = useState<RangeWorkingId | null>(null);
+  const working = open ? rangeWorking(open, scenario, cruise, view) : null;
+  const show = (id: RangeWorkingId) => (
+    <ShowWorking open={open === id} onToggle={() => setOpen(open === id ? null : id)} controls={WORKING_ID} />
+  );
   const at = (c: CruiseCase) => (
     <>
       {speed(tasToCas(c.tasStart, atmosphere.pressure, atmosphere.speedOfSound), view.unit)} CAS{' '}
@@ -71,9 +82,23 @@ export function CruiseTab({ cruise, view, theme }: Props) {
                 aboard. No reserve, climb or descent.
               </p>
               <dl className="readout">
-                <Row label="Best range" value={<strong>{num(result.range.value / (view.unit === 'kt' ? 1852 : 1000))} {distanceUnit(view)}</strong>} />
+                <Row
+                  label="Best range"
+                  value={
+                    <>
+                      <strong>{num(result.range.value / (view.unit === 'kt' ? 1852 : 1000))} {distanceUnit(view)}</strong> {show('range')}
+                    </>
+                  }
+                />
                 <Row label={cruise.fuelLine ? 'flown at' : jet ? <>flown at V<sub>jr</sub>, max C<sub>L</sub><sup>0.5</sup>/C<sub>D</sub></> : <>flown at V<sub>md</sub>, max L/D</>} value={at(result.range)} />
-                <Row label="Best endurance" value={<strong>{num(result.endurance.value / 3600, 1)} h</strong>} />
+                <Row
+                  label="Best endurance"
+                  value={
+                    <>
+                      <strong>{num(result.endurance.value / 3600, 1)} h</strong> {show('endurance')}
+                    </>
+                  }
+                />
                 <Row label={cruise.fuelLine ? 'flown at' : jet ? <>flown at V<sub>md</sub>, max L/D</> : <>flown at V<sub>mp</sub>, max C<sub>L</sub><sup>1.5</sup>/C<sub>D</sub></>} value={at(result.endurance)} />
                 {cruise.beyondModel && (
                   <Row label="Caution" value={<span className="caution">The best-range speed is past Mach 0.7, where the polar no longer holds.</span>} />
@@ -85,7 +110,7 @@ export function CruiseTab({ cruise, view, theme }: Props) {
           )}
         </section>
 
-        {cruise.setPower && <SetPowerCard cruise={cruise} view={view} />}
+        {cruise.setPower && <SetPowerCard cruise={cruise} view={view} show={show('set-power')} />}
 
         <section className="card table-card" aria-labelledby="breguet-h">
           <h3 id="breguet-h">Which speed is best</h3>
@@ -106,12 +131,13 @@ export function CruiseTab({ cruise, view, theme }: Props) {
           </dl>
         </section>
       </div>
+      {working && <WorkingCard id={WORKING_ID} working={working} onClose={() => setOpen(null)} />}
     </>
   );
 }
 
 /** Cruise at the sidebar's power setting, the way a POH tabulates it. */
-function SetPowerCard({ cruise, view }: { cruise: CruiseModel; view: ViewSettings }) {
+function SetPowerCard({ cruise, view, show }: { cruise: CruiseModel; view: ViewSettings; show: ReactNode }) {
   const p = cruise.setPower!;
   const { atmosphere } = cruise;
   const pct = (f: number) => `${num(f * 100)} %`;
@@ -168,6 +194,7 @@ function SetPowerCard({ cruise, view }: { cruise: CruiseModel; view: ViewSetting
           />
         )}
       </dl>
+      {p.tas !== null && <p className="card-foot">{show}</p>}
     </section>
   );
 }

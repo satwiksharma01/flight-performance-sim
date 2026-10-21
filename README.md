@@ -95,8 +95,10 @@ cross-check on every push, and deploys to GitHub Pages when they pass. See [ROAD
 - **The working behind every headline number.** Click a tile (density altitude,
   stall speed, best climb, service ceiling, best glide, maximum level speed) for its
   equation, then the same equation with this scenario's numbers in, then the result,
-  with every input listed and sourced. The working is computed from the formulas it
-  shows, and the tests check it lands on the tile.
+  with every input listed and sourced. The range tab does the same for best range,
+  best endurance and the set-power cruise: Breguet in closed form with the fuel
+  line's base flow, which matches the numerical integration. The working is computed
+  from the formulas it shows, and the tests check it lands on the result.
 - **Every scenario is a link.** `?ac=c172&h=2438.4&disa=15` is a Cessna at
   8,000 ft on an ISA +15 day. An edited preset stays short: `?ac=c172&cd0=0.03`.
 
@@ -227,7 +229,7 @@ npm run build        # static site in dist/, relative paths, any host
 | `src/app/envelope.ts`, `runway.ts`, `cruise.ts`, `contour.ts` | The envelope, takeoff and range tabs' models, and marching-squares contours |
 | `src/app/compare.ts` | The second aircraft: same condition, same MTOW fraction, and the side-by-side table |
 | `src/app/sensitivity.ts` | Elasticities by central difference, ranked, with a templated sentence |
-| `src/app/working.ts`, `expression.ts` | The working behind each tile: formulas in a small expression language, evaluated and drawn from one parse |
+| `src/app/working.ts`, `working-tabs.ts`, `expression.ts` | The working behind each tile and the range tab: formulas in a small expression language, evaluated and drawn from one parse |
 | `src/data/validation/` | The validation dataset, the POH tables, and the cross-check's last run |
 | `src/app/components/` | React controls, readouts, and the uPlot chart with its marker overlays |
 

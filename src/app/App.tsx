@@ -440,7 +440,7 @@ export function App() {
                   onEnergyPick={pickEnergy}
                 />
               )}
-              {view.tab === 'range' && cruise && <CruiseTab cruise={cruise} view={view} theme={theme} />}
+              {view.tab === 'range' && cruise && <CruiseTab cruise={cruise} scenario={scenario} view={view} theme={theme} />}
               {view.tab === 'sensitivity' && sensitivity && (
                 <SensitivityTab model={sensitivity} comparing={state.compare !== undefined} />
               )}

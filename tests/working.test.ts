@@ -5,6 +5,8 @@ import { DEFAULT_VIEW, buildChartModel, type ViewSettings } from '../src/app/mod
 import { DEFAULT_SCENARIO, type Scenario } from '../src/state/url.js';
 import { PRESETS } from '../src/data/aircraft/presets.js';
 import { SERVICE_CEILING_RATE } from '../src/physics/performance/climb.js';
+import { buildCruiseModel } from '../src/app/cruise.js';
+import { rangeWorking } from '../src/app/working-tabs.js';
 import type { PistonEngine } from '../src/physics/propulsion.js';
 
 const FPM = 60 / 0.3048;
@@ -104,4 +106,43 @@ describe('the working behind each tile', () => {
       });
     });
   }
+});
+
+describe('the working behind the range tab', () => {
+  const rangeView: ViewSettings = { ...DEFAULT_VIEW, tab: 'range' };
+  const { baseFuelFlow: _b, ...constantSfc } = PRESETS.c172.propulsion!;
+  const jetWithBase = { ...PRESETS['jet-trainer'], propulsion: { ...PRESETS['jet-trainer'].propulsion!, baseFuelFlow: 0.02 } };
+  const CASES: readonly [string, Scenario][] = [
+    ['172 at sea level: fuel line, endurance held at 1.2 V_s', DEFAULT_SCENARIO],
+    ['172 at 8,500 ft, raised CLmax: fuel line, endurance at its optimum', { ...DEFAULT_SCENARIO, presetId: null, aircraft: { ...PRESETS.c172, clMax: 3 }, altitude: 8500 * 0.3048 }],
+    ['172 with constant SFC', { ...DEFAULT_SCENARIO, presetId: null, aircraft: { ...PRESETS.c172, propulsion: constantSfc } }],
+    ['jet at FL250', { ...DEFAULT_SCENARIO, presetId: 'jet-trainer', aircraft: PRESETS['jet-trainer'], altitude: 25000 * 0.3048, tas: 200 }],
+    ['jet with a base fuel flow', { ...DEFAULT_SCENARIO, presetId: null, aircraft: jetWithBase, altitude: 6000, tas: 200 }],
+  ];
+
+  for (const [label, scenario] of CASES) {
+    it(`agrees with the numerical integration in closed form: ${label}`, () => {
+      const cruise = buildCruiseModel(scenario, rangeView);
+      for (const kind of ['range', 'endurance'] as const) {
+        const w = rangeWorking(kind, scenario, cruise, rangeView)!;
+        expect(result(w) / cruise.result![kind].value, kind).toBeCloseTo(1, 9);
+        const screen = fromScreen(w);
+        expect(screen[screen.length - 1]! / result(w), `${kind} from the screen`).toBeCloseTo(1, 3);
+      }
+      const p = rangeWorking('set-power', scenario, cruise, rangeView)!;
+      expect(result(p) / cruise.setPower!.range!).toBeCloseTo(1, 12);
+      const balance = p.steps.find((s) => s.name === 'eta_P_minus_D_V' || s.name === 'T_minus_D')!.value;
+      expect(Math.abs(balance) / step(p, 'D')).toBeLessThan(1e-6);
+    });
+  }
+
+  it('covers every closed form: both base-flow arctangents, both logarithms, both textbook cases', () => {
+    const formulas = CASES.flatMap(([, scenario]) => {
+      const cruise = buildCruiseModel(scenario, rangeView);
+      return (['range', 'endurance'] as const).map((kind) => rangeWorking(kind, scenario, cruise, rangeView)!.steps.at(-1)!.formula);
+    });
+    for (const marker of ['ln(mdot_0 / mdot_1)', 'atan(sqrt(W_0) / q)', 'F_0 - F_1', 'sqrt(W_0) - sqrt(W_1)', 'W_1 ^ -0.5']) {
+      expect(formulas.some((f) => f.includes(marker)), marker).toBe(true);
+    }
+  });
 });

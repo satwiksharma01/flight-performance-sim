@@ -2,11 +2,12 @@ import { Fragment, type ReactNode } from 'react';
 import { tokenize, type Token } from '../expression.js';
 import { FIGURES, rounded, type Working } from '../working.js';
 
-const GREEK: Record<string, string> = { rho: 'ρ', gamma: 'γ', sigma: 'σ', phi: 'φ', pi: 'π' };
+const GREEK: Record<string, string> = { rho: 'ρ', gamma: 'γ', sigma: 'σ', phi: 'φ', pi: 'π', eta: 'η', mdot: 'ṁ' };
 
 const NAMED: Record<string, ReactNode> = {
   sin_gamma: 'sin γ',
   T_minus_D: 'T − D',
+  eta_P_minus_D_V: 'η P − D V',
   RoC: 'RoC',
   C_D0off: (
     <>
@@ -96,16 +97,31 @@ function render(tokens: readonly Token[], values?: Readonly<Record<string, numbe
   return out.map((node, i) => <Fragment key={i}>{node}</Fragment>);
 }
 
-/** The working behind one tile: each step as a formula, with its numbers, and its result. */
-export function WorkingCard({ working, onClose }: { working: Working; onClose: () => void }) {
+/** The button that opens a result's working. */
+export function ShowWorking({ open, onToggle, controls }: { open: boolean; onToggle: () => void; controls: string }) {
+  return (
+    <button
+      type="button"
+      className="link-button working-toggle"
+      aria-expanded={open}
+      aria-controls={open ? controls : undefined}
+      onClick={onToggle}
+    >
+      {open ? 'Hide the working' : 'Show the working'}
+    </button>
+  );
+}
+
+/** The working behind one result: each step as a formula, with its numbers, and its result. */
+export function WorkingCard({ working, onClose, id = 'working' }: { working: Working; onClose: () => void; id?: string }) {
   const values: Record<string, number> = Object.fromEntries([
     ...Object.entries(working.given).map(([name, g]) => [name, g.value] as const),
     ...working.steps.map((s) => [s.name, s.value] as const),
   ]);
   return (
-    <section className="card working" id="working" aria-labelledby="working-h">
+    <section className="card working" id={id} aria-labelledby={`${id}-h`}>
       <div className="working-head">
-        <h3 id="working-h">{working.title}: the working</h3>
+        <h3 id={`${id}-h`}>{working.title}: the working</h3>
         <button type="button" className="button button--quiet" onClick={onClose}>
           Close
         </button>

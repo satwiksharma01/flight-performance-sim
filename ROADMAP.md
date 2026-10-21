@@ -396,7 +396,11 @@ curve move. A complete product at a tiny scope.
       formula with the numbers, and the result. One parse of each formula both
       evaluates and draws it, and tests check every chain lands on its tile's value,
       also when reworked from the six-figure numbers shown. Numerical results (V_y,
-      the ceiling, V_max, minimum sink) show the condition solved. The tabs next*
+      the ceiling, V_max, minimum sink) show the condition solved. Range tab done:
+      best range and endurance as Breguet in closed form with the fuel line's base
+      flow (atan and log terms), equal to the numerical Simpson integration to 1e-9,
+      and the set-power cruise as its power balance, fuel flow and time. The envelope
+      and runway tabs next*
 - [ ] Export chart as PNG / data as CSV
 - [ ] Publish `physics/` as a standalone npm package
 
